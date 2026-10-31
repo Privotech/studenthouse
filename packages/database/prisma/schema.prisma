@@ -1,0 +1,654 @@
+// NaijaPlay — Phase 1 Authoritative Relational Schema (PostgreSQL + Prisma)
+// Domains: Identity, Schools, Gaming, Progression, Learning, Competitions, Community, Safety, Platform
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ============================================================================
+// ENUMS
+// ============================================================================
+
+enum UserRole {
+  PLAYER
+  GUARDIAN
+  TEACHER
+  SCHOOL_ADMIN
+  MODERATOR
+  PLATFORM_ADMIN
+}
+
+enum AgeZone {
+  JUNIOR // Ages 6–12
+  TEEN   // Ages 13–17
+  YOUTH  // Ages 18–25
+}
+
+enum AccountStatus {
+  PENDING_GUARDIAN_CONSENT
+  PENDING_VERIFICATION
+  ACTIVE
+  RESTRICTED
+  SUSPENDED
+  DEACTIVATED
+}
+
+enum ConsentStatus {
+  PENDING
+  GRANTED
+  REVOKED
+  EXPIRED
+}
+
+enum ProfileVisibility {
+  PRIVATE_GUARDIAN_ONLY
+  SCHOOL_AND_CLUB_ONLY
+  PUBLIC_OPT_IN
+}
+
+enum SchoolRole {
+  STUDENT
+  TEACHER
+  SCHOOL_ADMIN
+}
+
+enum GameCategory {
+  TRIVIA
+  LOGIC
+  WORD
+  MATH
+  MEMORY
+  CODING
+}
+
+enum SessionStatus {
+  IN_PROGRESS
+  COMPLETED
+  ABANDONED
+  INVALIDATED
+}
+
+enum MissionFrequency {
+  DAILY
+  WEEKLY
+  SPECIAL_EVENT
+}
+
+enum XPTransactionSource {
+  GAME_COMPLETION
+  DAILY_MISSION
+  WEEKLY_MISSION
+  LEARNING_LESSON
+  TOURNAMENT_PLACEMENT
+  ACHIEVEMENT_UNLOCK
+  CREATIVE_CHALLENGE
+}
+
+enum TournamentStatus {
+  DRAFT
+  REGISTRATION_OPEN
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum ModerationStatus {
+  PENDING_REVIEW
+  APPROVED
+  REJECTED
+  ESCALATED
+}
+
+enum ReportReasonCategory {
+  INAPPROPRIATE_FOR_AGE
+  PERSONAL_INFORMATION_EXPOSURE
+  UNFAIR_PLAY_OR_CHEATING
+  HARASSMENT_OR_BULLYING
+  SPAM_OR_SCAM
+}
+
+// ============================================================================
+// 1. IDENTITY & GUARDIANSHIP
+// ============================================================================
+
+model User {
+  id                  String        @id @default(uuid()) @db.Uuid
+  email               String?       @unique
+  emailVerifiedAt     DateTime?
+  passwordHash        String?
+  role                UserRole      @default(PLAYER)
+  accountStatus       AccountStatus @default(PENDING_VERIFICATION)
+  countryCode         String        @default("NG") @db.VarChar(2)
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+  deletedAt           DateTime?
+
+  // Relations
+  playerProfile       PlayerProfile?
+  guardianProfile     Guardian?
+  schoolMemberships   SchoolMembership[]
+  notifications       Notification[]
+  reportsSubmitted    ContentReport[]    @relation("ReporterUser")
+  moderationActions   ModerationAction[] @relation("ModeratorUser")
+  auditLogs           AuditLog[]         @relation("ActorUser")
+
+  @@index([role, accountStatus])
+  @@index([countryCode])
+}
+
+model PlayerProfile {
+  id                        String            @id @default(uuid()) @db.Uuid
+  userId                    String            @unique @db.Uuid
+  displayName               String            @unique @db.VarChar(20)
+  dateOfBirth               DateTime          @db.Date
+  ageZone                   AgeZone
+  avatarId                  String            @default("default_explorer") @db.VarChar(64)
+  profileVisibility         ProfileVisibility @default(PRIVATE_GUARDIAN_ONLY)
+  dailyScreenTimeLimitMins  Int?              // Enforced for JUNIOR & TEEN zones
+  currentStreakDays         Int               @default(0)
+  lastActiveDate            DateTime?         @db.Date
+  createdAt                 DateTime          @default(now())
+  updatedAt                 DateTime          @updatedAt
+
+  // Relations
+  user                      User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  guardianLinks             GuardianConsent[]
+  gameSessions              GameSession[]
+  gameScores                GameScore[]
+  missionCompletions        MissionCompletion[]
+  xpTransactions            XPTransaction[]
+  achievements              PlayerAchievement[]
+  learningProgress          LearningProgress[]
+  tournamentEntries         TournamentEntry[]
+  tournamentResults         TournamentResult[]
+  clubMemberships           ClubMembership[]
+  creativeSubmissions       CreativeSubmission[]
+
+  @@index([ageZone])
+  @@index([displayName])
+}
+
+model Guardian {
+  id                  String            @id @default(uuid()) @db.Uuid
+  userId              String            @unique @db.Uuid
+  fullName            String            @db.VarChar(120)
+  phoneNumberHash     String?           @db.VarChar(128)
+  verifiedAt          DateTime?
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+
+  // Relations
+  user                User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  consents            GuardianConsent[]
+}
+
+model GuardianConsent {
+  id                      String        @id @default(uuid()) @db.Uuid
+  guardianId              String        @db.Uuid
+  playerProfileId         String        @db.Uuid
+  status                  ConsentStatus @default(PENDING)
+  grantedScopes           String[]      // Array of ConsentScope values
+  verificationMethod      String        @db.VarChar(64)
+  verificationTokenHash   String        @db.VarChar(128)
+  grantedAt               DateTime?
+  revokedAt               DateTime?
+  revocationReason        String?       @db.VarChar(255)
+  expiresAt               DateTime?
+  createdAt               DateTime      @default(now())
+  updatedAt               DateTime      @updatedAt
+
+  // Relations
+  guardian                Guardian      @relation(fields: [guardianId], references: [id], onDelete: Restrict)
+  playerProfile           PlayerProfile @relation(fields: [playerProfileId], references: [id], onDelete: Cascade)
+
+  @@unique([guardianId, playerProfileId])
+  @@index([playerProfileId, status])
+}
+
+// ============================================================================
+// 2. SCHOOLS & INSTITUTIONAL PORTAL
+// ============================================================================
+
+model School {
+  id                  String             @id @default(uuid()) @db.Uuid
+  name                String             @db.VarChar(160)
+  registrationCode    String             @unique @db.VarChar(24)
+  countryCode         String             @default("NG") @db.VarChar(2)
+  stateCode           String             @db.VarChar(32)
+  city                String             @db.VarChar(80)
+  isVerified          Boolean            @default(false)
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+
+  // Relations
+  memberships         SchoolMembership[]
+  tournamentEntries   TournamentEntry[]
+  clubs               Club[]
+
+  @@index([countryCode, stateCode])
+}
+
+model SchoolMembership {
+  id                  String     @id @default(uuid()) @db.Uuid
+  schoolId            String     @db.Uuid
+  userId              String     @db.Uuid
+  schoolRole          SchoolRole @default(STUDENT)
+  classroomLabel      String?    @db.VarChar(64)
+  isApproved          Boolean    @default(false)
+  joinedAt            DateTime   @default(now())
+
+  // Relations
+  school              School     @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  user                User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([schoolId, userId])
+  @@index([schoolId, schoolRole])
+}
+
+// ============================================================================
+// 3. GAMING ARENA
+// ============================================================================
+
+model Game {
+  id                      String        @id @default(uuid()) @db.Uuid
+  slug                    String        @unique @db.VarChar(64)
+  title                   String        @db.VarChar(120)
+  description             String        @db.Text
+  category                GameCategory
+  minAgeZone              AgeZone       @default(JUNIOR)
+  maxAgeZone              AgeZone       @default(YOUTH)
+  maxPossibleScore        Int
+  pointsPerCorrectAnswer  Int
+  maxQuestionsPerSession  Int
+  minSecondsPerQuestion   Float
+  baseXPReward            Int
+  maxBonusXP              Int
+  isPublished             Boolean       @default(false)
+  version                 String        @default("1.0.0") @db.VarChar(16)
+  createdAt               DateTime      @default(now())
+  updatedAt               DateTime      @updatedAt
+
+  // Relations
+  sessions                GameSession[]
+  scores                  GameScore[]
+  tournaments             Tournament[]
+
+  @@index([category, isPublished])
+  @@index([minAgeZone, maxAgeZone])
+}
+
+model GameSession {
+  id                  String        @id @default(uuid()) @db.Uuid
+  gameId              String        @db.Uuid
+  playerProfileId     String        @db.Uuid
+  status              SessionStatus @default(IN_PROGRESS)
+  seedHash            String        @db.VarChar(128)
+  startedAt           DateTime      @default(now())
+  completedAt         DateTime?
+  durationSeconds     Int?
+  questionsAnswered   Int           @default(0)
+  correctAnswers      Int           @default(0)
+  clientEventCount    Int           @default(0)
+  anomalyFlags        String[]
+
+  // Relations
+  game                Game          @relation(fields: [gameId], references: [id], onDelete: Restrict)
+  playerProfile       PlayerProfile @relation(fields: [playerProfileId], references: [id], onDelete: Cascade)
+  verifiedScore       GameScore?
+
+  @@index([playerProfileId, startedAt])
+  @@index([gameId, status])
+}
+
+model GameScore {
+  id                  String        @id @default(uuid()) @db.Uuid
+  sessionId           String        @unique @db.Uuid
+  gameId              String        @db.Uuid
+  playerProfileId     String        @db.Uuid
+  score               Int
+  accuracyBasisPoints Int           // 0 to 10000 (100.00%)
+  durationSeconds     Int
+  isVerified          Boolean       @default(true)
+  recordedAt          DateTime      @default(now())
+
+  // Relations
+  session             GameSession   @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+  game                Game          @relation(fields: [gameId], references: [id], onDelete: Restrict)
+  playerProfile       PlayerProfile @relation(fields: [playerProfileId], references: [id], onDelete: Cascade)
+
+  @@index([gameId, score(sort: Desc), durationSeconds(sort: Asc)])
+  @@index([playerProfileId, recordedAt])
+}
+
+// ============================================================================
+// 4. PROGRESSION, MISSIONS & IMMUTABLE XP LEDGER
+// ============================================================================
+
+model Mission {
+  id                  String              @id @default(uuid()) @db.Uuid
+  code                String              @unique @db.VarChar(64)
+  title               String              @db.VarChar(140)
+  description         String              @db.VarChar(280)
+  frequency           MissionFrequency
+  minAgeZone          AgeZone             @default(JUNIOR)
+  targetCount         Int                 @default(1)
+  xpReward            Int
+  isActive            Boolean             @default(true)
+  createdAt           DateTime            @default(now())
+
+  // Relations
+  completions         MissionCompletion[]
+
+  @@index([frequency, isActive])
+}
+
+model MissionCompletion {
+  id                  String        @id @default(uuid()) @db.Uuid
+  missionId           String        @db.Uuid
+  playerProfileId     String        @db.Uuid
+  periodKey           String        @db.VarChar(32) // e.g. "2026-10-31" for daily or "2026-W44" for weekly
+  xpTransactionId     String        @unique @db.Uuid
+  completedAt         DateTime      @default(now())
+
+  // Relations
+  mission             Mission       @relation(fields: [missionId], references: [id], onDelete: Restrict)
+  playerProfile       PlayerProfile @relation(fields: [playerProfileId], references: [id], onDelete: Cascade)
+  xpTransaction       XPTransaction @relation(fields: [xpTransactionId], references: [id], onDelete: Restrict)
+
+  // Prevents duplicate mission rewards for the same mission in the same period
+  @@unique([missionId, playerProfileId, periodKey])
+  @@index([playerProfileId, completedAt])
+}
+
+model XPTransaction {
+  id                  String              @id @default(uuid()) @db.Uuid
+  playerProfileId     String              @db.Uuid
+  source              XPTransactionSource
+  referenceId         String              @db.VarChar(128)
+  idempotencyKey      String              @unique @db.VarChar(128)
+  amount              Int                 // Immutable positive integer; append-only ledger
+  createdAt           DateTime            @default(now())
+
+  // Relations
+  playerProfile       PlayerProfile       @relation(fields: [playerProfileId], references: [id], onDelete: Restrict)
+  missionCompletion   MissionCompletion?
+
+  @@unique([playerProfileId, source, referenceId])
+  @@index([playerProfileId, createdAt(sort: Desc)])
+}
+
+model Achievement {
+  id                  String              @id @default(uuid()) @db.Uuid
+  code                String              @unique @db.VarChar(64)
+  title               String              @db.VarChar(120)
+  description         String              @db.VarChar(255)
+  iconKey             String              @db.VarChar(64)
+  xpBonus             Int                 @default(50)
+  createdAt           DateTime            @default(now())
+
+  // Relations
+  unlockedBy          PlayerAchievement[]
+}
+
+model PlayerAchievement {
+  id                  String        @id @default(uuid()) @db.Uuid
+  playerProfileId     String        @db.Uuid
+  achievementId       String        @db.Uuid
+  unlockedAt          DateTime      @default(now())
+
+  // Relations
+  playerProfile       PlayerProfile @relation(fields: [playerProfileId], references: [id], onDelete: Cascade)
+  achievement         Achievement   @relation(fields: [achievementId], references: [id], onDelete: Restrict)
+
+  @@unique([playerProfileId, achievementId])
+}
+
+// ============================================================================
+// 5. LEARN & GROW
+// ============================================================================
+
+model LearningCourse {
+  id                  String             @id @default(uuid()) @db.Uuid
+  slug                String             @unique @db.VarChar(80)
+  title               String             @db.VarChar(140)
+  subjectCategory     String             @db.VarChar(64)
+  minAgeZone          AgeZone            @default(JUNIOR)
+  maxAgeZone          AgeZone            @default(YOUTH)
+  isPublished         Boolean            @default(false)
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+
+  // Relations
+  lessons             LearningLesson[]
+  progressRecords     LearningProgress[]
+
+  @@index([subjectCategory, isPublished])
+}
+
+model LearningLesson {
+  id                  String             @id @default(uuid()) @db.Uuid
+  courseId            String             @db.Uuid
+  sequenceOrder       Int
+  title               String             @db.VarChar(140)
+  contentMarkdown     String             @db.Text
+  xpReward            Int                @default(50)
+  passingScorePercent Int                @default(70)
+  createdAt           DateTime           @default(now())
+
+  // Relations
+  course              LearningCourse     @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  progressRecords     LearningProgress[]
+
+  @@unique([courseId, sequenceOrder])
+}
+
+model LearningProgress {
+  id                  String         @id @default(uuid()) @db.Uuid
+  playerProfileId     String         @db.Uuid
+  courseId            String         @db.Uuid
+  lessonId            String         @db.Uuid
+  quizScorePercent    Int
+  completedAt         DateTime       @default(now())
+
+  // Relations
+  playerProfile       PlayerProfile  @relation(fields: [playerProfileId], references: [id], onDelete: Cascade)
+  course              LearningCourse @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  lesson              LearningLesson @relation(fields: [lessonId], references: [id], onDelete: Restrict)
+
+  @@unique([playerProfileId, lessonId])
+  @@index([playerProfileId, courseId])
+}
+
+// ============================================================================
+// 6. COMPETITION ARENA
+// ============================================================================
+
+model Tournament {
+  id                  String             @id @default(uuid()) @db.Uuid
+  slug                String             @unique @db.VarChar(80)
+  title               String             @db.VarChar(160)
+  gameId              String             @db.Uuid
+  targetAgeZone       AgeZone
+  countryCode         String             @default("NG") @db.VarChar(2)
+  status              TournamentStatus   @default(DRAFT)
+  startsAt            DateTime
+  endsAt              DateTime
+  createdAt           DateTime           @default(now())
+
+  // Relations
+  game                Game               @relation(fields: [gameId], references: [id], onDelete: Restrict)
+  entries             TournamentEntry[]
+  results             TournamentResult[]
+
+  @@index([status, targetAgeZone, countryCode])
+}
+
+model TournamentEntry {
+  id                  String        @id @default(uuid()) @db.Uuid
+  tournamentId        String        @db.Uuid
+  playerProfileId     String        @db.Uuid
+  schoolId            String?       @db.Uuid
+  registeredAt        DateTime      @default(now())
+
+  // Relations
+  tournament          Tournament    @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  playerProfile       PlayerProfile @relation(fields: [playerProfileId], references: [id], onDelete: Cascade)
+  school              School?       @relation(fields: [schoolId], references: [id], onDelete: SetNull)
+
+  // Prevents duplicate tournament entries for the same player
+  @@unique([tournamentId, playerProfileId])
+  @@index([tournamentId, schoolId])
+}
+
+model TournamentResult {
+  id                  String        @id @default(uuid()) @db.Uuid
+  tournamentId        String        @db.Uuid
+  playerProfileId     String        @db.Uuid
+  rankPosition        Int
+  verifiedBestScore   Int
+  awardedXP           Int           @default(0)
+  finalizedAt         DateTime      @default(now())
+
+  // Relations
+  tournament          Tournament    @relation(fields: [tournamentId], references: [id], onDelete: Restrict)
+  playerProfile       PlayerProfile @relation(fields: [playerProfileId], references: [id], onDelete: Restrict)
+
+  @@unique([tournamentId, playerProfileId])
+  @@index([tournamentId, rankPosition(sort: Asc)])
+}
+
+// ============================================================================
+// 7. CLUBS & CREATIVE STUDIO
+// ============================================================================
+
+model Club {
+  id                  String           @id @default(uuid()) @db.Uuid
+  slug                String           @unique @db.VarChar(64)
+  name                String           @db.VarChar(120)
+  description         String           @db.VarChar(280)
+  topicCategory       String           @db.VarChar(64)
+  targetAgeZone       AgeZone
+  schoolId            String?          @db.Uuid
+  isModerated         Boolean          @default(true)
+  createdAt           DateTime         @default(now())
+
+  // Relations
+  school              School?          @relation(fields: [schoolId], references: [id], onDelete: SetNull)
+  memberships         ClubMembership[]
+
+  @@index([targetAgeZone, topicCategory])
+}
+
+model ClubMembership {
+  id                  String        @id @default(uuid()) @db.Uuid
+  clubId              String        @db.Uuid
+  playerProfileId     String        @db.Uuid
+  joinedAt            DateTime      @default(now())
+
+  // Relations
+  club                Club          @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  playerProfile       PlayerProfile @relation(fields: [playerProfileId], references: [id], onDelete: Cascade)
+
+  @@unique([clubId, playerProfileId])
+}
+
+model CreativeSubmission {
+  id                  String           @id @default(uuid()) @db.Uuid
+  playerProfileId     String           @db.Uuid
+  challengeCode       String           @db.VarChar(64)
+  title               String           @db.VarChar(120)
+  mediaStorageKey     String           @db.VarChar(255)
+  mediaMimeType       String           @db.VarChar(64)
+  moderationStatus    ModerationStatus @default(PENDING_REVIEW)
+  submittedAt         DateTime         @default(now())
+  reviewedAt          DateTime?
+
+  // Relations
+  playerProfile       PlayerProfile    @relation(fields: [playerProfileId], references: [id], onDelete: Cascade)
+
+  @@index([moderationStatus, submittedAt])
+  @@index([playerProfileId])
+}
+
+// ============================================================================
+// 8. SAFETY, MODERATION & AUDIT LOGS
+// ============================================================================
+
+model ContentReport {
+  id                  String               @id @default(uuid()) @db.Uuid
+  reporterUserId      String               @db.Uuid
+  targetType          String               @db.VarChar(64)
+  targetId            String               @db.Uuid
+  reasonCategory      ReportReasonCategory
+  details             String               @db.VarChar(500)
+  status              ModerationStatus     @default(PENDING_REVIEW)
+  createdAt           DateTime             @default(now())
+
+  // Relations
+  reporter            User                 @relation("ReporterUser", fields: [reporterUserId], references: [id], onDelete: Restrict)
+  moderationActions   ModerationAction[]
+
+  @@index([status, createdAt])
+  @@index([targetType, targetId])
+}
+
+model ModerationAction {
+  id                  String           @id @default(uuid()) @db.Uuid
+  moderatorUserId     String           @db.Uuid
+  reportId            String?          @db.Uuid
+  targetType          String           @db.VarChar(64)
+  targetId            String           @db.Uuid
+  decision            ModerationStatus
+  rationale           String           @db.VarChar(500)
+  createdAt           DateTime         @default(now())
+
+  // Relations
+  moderator           User             @relation("ModeratorUser", fields: [moderatorUserId], references: [id], onDelete: Restrict)
+  report              ContentReport?   @relation(fields: [reportId], references: [id], onDelete: SetNull)
+
+  @@index([moderatorUserId, createdAt])
+  @@index([targetType, targetId])
+}
+
+model AuditLog {
+  id                  String   @id @default(uuid()) @db.Uuid
+  actorUserId         String   @db.Uuid
+  actorRole           UserRole
+  actionType          String   @db.VarChar(80)
+  entityType          String   @db.VarChar(64)
+  entityId            String   @db.VarChar(128)
+  ipAddressHash       String?  @db.VarChar(128)
+  metadataJson        String   @db.Text
+  createdAt           DateTime @default(now())
+
+  // Relations
+  actor               User     @relation("ActorUser", fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@index([actorUserId, createdAt(sort: Desc)])
+  @@index([entityType, entityId])
+}
+
+// ============================================================================
+// 9. PLATFORM NOTIFICATIONS
+// ============================================================================
+
+model Notification {
+  id                  String    @id @default(uuid()) @db.Uuid
+  userId              String    @db.Uuid
+  title               String    @db.VarChar(140)
+  body                String    @db.VarChar(280)
+  category            String    @db.VarChar(48)
+  readAt              DateTime?
+  createdAt           DateTime  @default(now())
+
+  // Relations
+  user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt, createdAt(sort: Desc)])
+}

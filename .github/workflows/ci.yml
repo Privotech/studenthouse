@@ -1,0 +1,41 @@
+name: NaijaPlay Phase 1 CI Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  verify-foundation:
+    name: Typecheck, Lint, Prisma Schema & Unit Tests
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/naijaplay_ci?schema=public"
+      DIRECT_URL: "postgresql://postgres:postgres@localhost:5432/naijaplay_ci?schema=public"
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Validate Prisma Relational Schema
+        run: npm run db:validate
+
+      - name: Strict TypeScript Check
+        run: npm run typecheck
+
+      - name: Run ESLint
+        run: npm run lint
+
+      - name: Execute Automated Test Suite (Vitest)
+        run: npm run test
+
+      - name: Build Next.js Production Bundle
+        run: npm run build

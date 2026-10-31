@@ -1,0 +1,6 @@
+{
+  "name": "NaijaPlay — Phase 1 Architecture & Foundation",
+  "description": "Production-grade technical foundation, modular monolith architecture, 26-model Prisma schema, age-aware RBAC/ABAC policy engine, server-authoritative XP ledger, and NDPA child-safety framework for NaijaPlay.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
