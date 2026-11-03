@@ -1,7 +1,6 @@
 "use client";
 
-import React from "react";
-import { Volume2, VolumeX, Flame, Sparkles, Map, Shield } from "lucide-react";
+import { Volume2, VolumeX, Flame, Sparkles, Map, Shield, KeyRound, LogIn, LogOut, UserCheck } from "lucide-react";
 import { AgeZone } from "@/types/naijaplay";
 import { sounds } from "@/lib/audio";
 import { PWAInstallButton } from "@/components/PWAInstallButton";
@@ -16,6 +15,11 @@ interface NavbarProps {
   onToggleSound: () => void;
   onOpenRoadmap: () => void;
   onOpenPortals: () => void;
+  onOpenAuth: (tab?: "signin" | "register") => void;
+  isAuthenticated: boolean;
+  userName: string;
+  userInitials: string;
+  onSignOut: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -28,6 +32,11 @@ export const Navbar: React.FC<NavbarProps> = ({
   onToggleSound,
   onOpenRoadmap,
   onOpenPortals,
+  onOpenAuth,
+  isAuthenticated,
+  userName,
+  userInitials,
+  onSignOut,
 }) => {
   const getZoneLabel = (zone: AgeZone) => {
     switch (zone) {
@@ -138,6 +147,62 @@ export const Navbar: React.FC<NavbarProps> = ({
               ({xp} XP)
             </span>
           </div>
+
+          {/* Authentication Status / Profile Button */}
+          {isAuthenticated ? (
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => {
+                  sounds.playClick();
+                  onOpenAuth("signin");
+                }}
+                className="flex items-center gap-2 rounded-lg border border-emerald-700/50 bg-emerald-950/40 px-2.5 py-1 text-xs font-bold text-white hover:border-emerald-500 transition-colors"
+                title={`Signed in as ${userName}. Click to view security details.`}
+              >
+                <div className="flex h-5 w-5 items-center justify-center rounded-md bg-emerald-600 text-[10px] font-mono text-white">
+                  {userInitials}
+                </div>
+                <span className="hidden md:inline font-mono text-emerald-300 max-w-[90px] truncate">
+                  {userName}
+                </span>
+                <span className="hidden sm:inline-block h-1.5 w-1.5 rounded-full bg-emerald-400" />
+              </button>
+              <button
+                onClick={() => {
+                  sounds.playClick();
+                  onSignOut();
+                }}
+                title="Sign Out"
+                className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-800 bg-slate-900 text-slate-400 hover:text-rose-400 hover:border-rose-800/60 transition-colors"
+                aria-label="Sign out"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => {
+                  sounds.playClick();
+                  onOpenAuth("signin");
+                }}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1 text-xs font-bold text-slate-200 hover:text-white hover:border-slate-600 transition-colors"
+              >
+                <LogIn className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Sign In</span>
+              </button>
+              <button
+                onClick={() => {
+                  sounds.playClick();
+                  onOpenAuth("register");
+                }}
+                className="hidden sm:inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-2.5 py-1 text-xs font-bold text-white hover:bg-emerald-500 shadow-sm transition-colors"
+              >
+                <KeyRound className="w-3.5 h-3.5" />
+                <span>Register</span>
+              </button>
+            </div>
+          )}
 
           {/* Sound Toggle */}
           <button

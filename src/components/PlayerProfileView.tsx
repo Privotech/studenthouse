@@ -14,6 +14,10 @@ import {
   Terminal,
   Globe,
   BookOpen,
+  Database,
+  Lock,
+  KeyRound,
+  ShieldCheck,
 } from "lucide-react";
 import { PlayerState } from "@/types/naijaplay";
 import { AVATAR_CRESTS } from "@/data/mockData";
@@ -24,6 +28,7 @@ interface PlayerProfileViewProps {
   onUpdateAvatarCrest: (crest: string) => void;
   onUpdateName: (name: string) => void;
   onUpdateAge: (age: number) => void;
+  onOpenAuth?: (tab?: "signin" | "register") => void;
 }
 
 const ACADEMIC_HONOURS = [
@@ -42,6 +47,7 @@ export const PlayerProfileView: React.FC<PlayerProfileViewProps> = ({
   onUpdateAvatarCrest,
   onUpdateName,
   onUpdateAge,
+  onOpenAuth,
 }) => {
   const [editingName, setEditingName] = useState(false);
   const [newName, setNewName] = useState(player.displayName);
@@ -227,6 +233,94 @@ export const PlayerProfileView: React.FC<PlayerProfileViewProps> = ({
               </div>
             </div>
           ))}
+        </div>
+      </div>
+
+      {/* NeonDB Identity & Security Section */}
+      <div className="rounded-2xl border border-slate-800 bg-slate-900/90 p-6 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-950 border border-emerald-500/40 text-emerald-400">
+              <Database className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="font-display text-lg font-bold text-white">
+                  PostgreSQL & Security Engine
+                </h3>
+                <span className="rounded bg-emerald-500/10 border border-emerald-500/30 px-2 py-0.5 text-[10px] font-mono font-bold text-emerald-400">
+                  NeonDB Serverless
+                </span>
+              </div>
+              <p className="text-xs text-slate-400">
+                Cryptographic authentication, brute-force mitigation, and session integrity.
+              </p>
+            </div>
+          </div>
+          {onOpenAuth && (
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  sounds.playClick();
+                  onOpenAuth("signin");
+                }}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs font-bold text-slate-200 hover:text-white hover:border-slate-600 transition-colors"
+              >
+                <KeyRound className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Switch / Sign In</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  sounds.playClick();
+                  onOpenAuth("register");
+                }}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-500 transition-colors shadow-sm"
+              >
+                <ShieldCheck className="w-3.5 h-3.5" />
+                <span>Register New</span>
+              </button>
+            </div>
+          )}
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="rounded-xl border border-slate-800 bg-slate-950 p-3 space-y-1">
+            <div className="flex items-center justify-between text-xs text-slate-400">
+              <span>Password Algorithm</span>
+              <Lock className="w-3.5 h-3.5 text-emerald-400" />
+            </div>
+            <p className="text-sm font-bold font-mono text-white">PBKDF2-SHA256</p>
+            <p className="text-[10px] text-slate-500">100,000 Key Derivation Iterations</p>
+          </div>
+
+          <div className="rounded-xl border border-slate-800 bg-slate-950 p-3 space-y-1">
+            <div className="flex items-center justify-between text-xs text-slate-400">
+              <span>Salt & Timing Shield</span>
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+            </div>
+            <p className="text-sm font-bold font-mono text-emerald-400">Constant-Time Safe</p>
+            <p className="text-[10px] text-slate-500">16-Byte Cryptographic Salt per User</p>
+          </div>
+
+          <div className="rounded-xl border border-slate-800 bg-slate-950 p-3 space-y-1">
+            <div className="flex items-center justify-between text-xs text-slate-400">
+              <span>Brute-Force Rate Limit</span>
+              <Flame className="w-3.5 h-3.5 text-amber-400" />
+            </div>
+            <p className="text-sm font-bold font-mono text-amber-400">5 Tries / 15-Min Lock</p>
+            <p className="text-[10px] text-slate-500">Sliding Window IP & Account Defense</p>
+          </div>
+
+          <div className="rounded-xl border border-slate-800 bg-slate-950 p-3 space-y-1">
+            <div className="flex items-center justify-between text-xs text-slate-400">
+              <span>Session Bearer</span>
+              <KeyRound className="w-3.5 h-3.5 text-emerald-400" />
+            </div>
+            <p className="text-sm font-bold font-mono text-white">64-Hex Secure Token</p>
+            <p className="text-[10px] text-slate-500">7-Day Expiry & HttpOnly Cookie</p>
+          </div>
         </div>
       </div>
 

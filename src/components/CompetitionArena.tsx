@@ -10,6 +10,10 @@ import {
   CheckCircle2,
   Filter,
   Sparkles,
+  X,
+  ArrowRight,
+  HelpCircle,
+  XCircle,
 } from "lucide-react";
 import { AgeZone, Tournament } from "@/types/naijaplay";
 import { LEADERBOARD_ENTRIES, TOURNAMENTS } from "@/data/mockData";
@@ -33,11 +37,91 @@ export const CompetitionArena: React.FC<CompetitionArenaProps> = ({
     return true;
   });
 
+  const [activeExamTourney, setActiveExamTourney] = useState<Tournament | null>(null);
+  const [examQIndex, setExamQIndex] = useState(0);
+  const [examSelectedOpt, setExamSelectedOpt] = useState<number | null>(null);
+  const [examScore, setExamScore] = useState(0);
+  const [examSubmitted, setExamSubmitted] = useState(false);
+  const [examFinished, setExamFinished] = useState(false);
+
+  const OLYMPIAD_QUESTIONS = [
+    {
+      discipline: "Pure Mathematics",
+      question: "If f(x) = 3x² - 12x + 7, at what critical value of x does the local extremum occur?",
+      options: ["x = 2", "x = 4", "x = -2", "x = 0"],
+      correctIndex: 0,
+      rationale: "Differentiating f(x) yields f'(x) = 6x - 12. Setting f'(x) = 0 gives x = 2.",
+    },
+    {
+      discipline: "Computer Science",
+      question: "What is the worst-case time complexity of standard unrandomized Quickselect algorithm?",
+      options: ["O(n²)", "O(n log n)", "O(n)", "O(log n)"],
+      correctIndex: 0,
+      rationale: "When bad pivot partitions occur repeatedly, standard Quickselect degrades to O(n²), though average runtime is O(n).",
+    },
+    {
+      discipline: "Physical Science",
+      question: "A projectile is launched vertically at 19.6 m/s in standard gravity (g = 9.8 m/s²). Neglecting drag, what is its maximum elevation?",
+      options: ["19.6 meters", "39.2 meters", "9.8 meters", "14.7 meters"],
+      correctIndex: 0,
+      rationale: "Using v² = u² - 2gh at max height where v=0: h = (19.6)² / (2 * 9.8) = 19.6 meters.",
+    },
+    {
+      discipline: "Trade & Economics",
+      question: "Under the AfCFTA protocol on Trade in Goods, what percentage of tariff lines must State Parties liberalize during phase one?",
+      options: ["90% of tariff lines", "50% of tariff lines", "75% of tariff lines", "100% of tariff lines"],
+      correctIndex: 0,
+      rationale: "The AfCFTA Agreement mandates 90% tariff liberalization across commercial product lines during the initial phase.",
+    },
+  ];
+
   const handleJoin = (tourney: Tournament) => {
     sounds.playTrophy();
     if (!joinedTournaments.includes(tourney.id)) {
       setJoinedTournaments([...joinedTournaments, tourney.id]);
       onAwardXP(50, `Registered for ${tourney.title}`);
+    }
+  };
+
+  const handleStartExam = (tourney: Tournament) => {
+    sounds.playClick();
+    setActiveExamTourney(tourney);
+    setExamQIndex(0);
+    setExamSelectedOpt(null);
+    setExamScore(0);
+    setExamSubmitted(false);
+    setExamFinished(false);
+  };
+
+  const handleSelectExamOption = (idx: number) => {
+    if (examSubmitted) return;
+    sounds.playClick();
+    setExamSelectedOpt(idx);
+  };
+
+  const handleSubmitExamOption = () => {
+    if (examSelectedOpt === null || examSubmitted) return;
+    const isCorrect = examSelectedOpt === OLYMPIAD_QUESTIONS[examQIndex]!.correctIndex;
+    if (isCorrect) {
+      sounds.playCorrect();
+      setExamScore((prev) => prev + 1);
+    } else {
+      sounds.playWrong();
+    }
+    setExamSubmitted(true);
+  };
+
+  const handleNextExamQuestion = () => {
+    if (examQIndex < OLYMPIAD_QUESTIONS.length - 1) {
+      sounds.playClick();
+      setExamQIndex((prev) => prev + 1);
+      setExamSelectedOpt(null);
+      setExamSubmitted(false);
+    } else {
+      sounds.playTrophy();
+      setExamFinished(true);
+      const earnedXP = 120 + examScore * 25;
+      onAwardXP(earnedXP, `Completed ${activeExamTourney?.title} Qualifier`);
     }
   };
 
@@ -171,32 +255,44 @@ export const CompetitionArena: React.FC<CompetitionArenaProps> = ({
                     </div>
                   </div>
 
-                  <button
-                    onClick={() => handleJoin(tourney)}
-                    className={`w-full py-2.5 rounded-xl text-xs font-bold transition-all shadow-md flex items-center justify-center gap-2 ${
-                      isJoined
-                        ? "bg-emerald-600 text-white"
-                        : "bg-slate-800 hover:bg-slate-700 text-white border border-slate-700"
-                    }`}
-                  >
-                    {isJoined ? (
-                      <>
-                        <CheckCircle2 className="w-4 h-4 text-emerald-300" />
-                        <span>Enrolled · Examination Ready</span>
-                      </>
-                    ) : (
-                      <>
-                        <Trophy className="w-4 h-4" />
-                        <span>Register for Olympiad (+50 XP)</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-              );
-            })}
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => handleJoin(tourney)}
+                        className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all shadow-md flex items-center justify-center gap-2 ${
+                          isJoined
+                            ? "bg-emerald-950/80 text-emerald-300 border border-emerald-700/60"
+                            : "bg-slate-800 hover:bg-slate-700 text-white border border-slate-700"
+                        }`}
+                      >
+                        {isJoined ? (
+                          <>
+                            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                            <span>Enrolled</span>
+                          </>
+                        ) : (
+                          <>
+                            <Trophy className="w-4 h-4" />
+                            <span>Register (+50 XP)</span>
+                          </>
+                        )}
+                      </button>
+
+                      {isJoined && (
+                        <button
+                          onClick={() => handleStartExam(tourney)}
+                          className="py-2.5 px-4 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-950/60 transition-colors flex items-center gap-1.5"
+                        >
+                          <Medal className="w-4 h-4 text-emerald-200" />
+                          <span>Start Qualifier</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
       {/* LEADERBOARD TAB */}
       {activeTab === "leaderboard" && (
@@ -329,6 +425,187 @@ export const CompetitionArena: React.FC<CompetitionArenaProps> = ({
             <p className="text-xs text-slate-300">
               Top Categories: Macroeconomics & Logic. 185 active scholars enrolled.
             </p>
+          </div>
+        </div>
+      )}
+
+      {/* Olympiad Qualifier Examination Modal */}
+      {activeExamTourney && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="w-full max-w-2xl rounded-2xl border border-slate-800 bg-slate-900 p-6 sm:p-7 text-slate-100 shadow-2xl space-y-6">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div>
+                <span className="text-[11px] font-mono font-bold text-amber-400 uppercase tracking-wider">
+                  National Interscholastic Qualifier
+                </span>
+                <h3 className="font-display text-lg font-bold text-white mt-0.5">
+                  {activeExamTourney.title}
+                </h3>
+              </div>
+              <button
+                onClick={() => {
+                  sounds.playClick();
+                  setActiveExamTourney(null);
+                }}
+                className="rounded-lg p-1 text-slate-400 hover:bg-slate-800 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {!examFinished ? (
+              <div className="space-y-5">
+                {/* Progress bar */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between text-xs font-mono text-slate-400">
+                    <span>
+                      Question {examQIndex + 1} of {OLYMPIAD_QUESTIONS.length}
+                    </span>
+                    <span className="text-emerald-400 font-semibold">
+                      Discipline: {OLYMPIAD_QUESTIONS[examQIndex]?.discipline}
+                    </span>
+                  </div>
+                  <div className="h-1.5 w-full rounded-full bg-slate-950 overflow-hidden border border-slate-800">
+                    <div
+                      className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-green-400 transition-all duration-300"
+                      style={{
+                        width: `${Math.round(((examQIndex + 1) / OLYMPIAD_QUESTIONS.length) * 100)}%`,
+                      }}
+                    />
+                  </div>
+                </div>
+
+                {/* Question */}
+                <div className="rounded-xl border border-slate-800 bg-slate-950 p-4">
+                  <p className="text-sm font-semibold text-white leading-relaxed">
+                    {OLYMPIAD_QUESTIONS[examQIndex]?.question}
+                  </p>
+                </div>
+
+                {/* Options */}
+                <div className="space-y-2.5">
+                  {OLYMPIAD_QUESTIONS[examQIndex]?.options.map((opt, i) => {
+                    const isSelected = examSelectedOpt === i;
+                    const isCorrect = i === OLYMPIAD_QUESTIONS[examQIndex]?.correctIndex;
+
+                    let btnClass = "border-slate-800 bg-slate-950 hover:border-slate-700 text-slate-200";
+                    if (examSubmitted) {
+                      if (isCorrect) {
+                        btnClass = "border-emerald-500 bg-emerald-950/60 text-emerald-200 font-semibold";
+                      } else if (isSelected) {
+                        btnClass = "border-rose-500 bg-rose-950/60 text-rose-200";
+                      } else {
+                        btnClass = "border-slate-800 bg-slate-950/40 text-slate-500";
+                      }
+                    } else if (isSelected) {
+                      btnClass = "border-emerald-500 bg-slate-800 text-white font-semibold ring-1 ring-emerald-500";
+                    }
+
+                    return (
+                      <button
+                        key={i}
+                        onClick={() => handleSelectExamOption(i)}
+                        disabled={examSubmitted}
+                        className={`w-full rounded-xl border p-3.5 text-left text-xs transition-all flex items-center justify-between ${btnClass}`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <span className="flex h-5 w-5 items-center justify-center rounded bg-slate-800 text-[10px] font-mono text-slate-300">
+                            {String.fromCharCode(65 + i)}
+                          </span>
+                          <span>{opt}</span>
+                        </div>
+                        {examSubmitted && isCorrect && (
+                          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                        )}
+                        {examSubmitted && isSelected && !isCorrect && (
+                          <XCircle className="w-4 h-4 text-rose-400 shrink-0" />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Explanation on submission */}
+                {examSubmitted && (
+                  <div className="rounded-xl border border-slate-800 bg-slate-950/90 p-3.5 text-xs text-slate-300 space-y-1">
+                    <span className="font-mono font-bold text-emerald-400 block">
+                      Academic Rationale:
+                    </span>
+                    <p>{OLYMPIAD_QUESTIONS[examQIndex]?.rationale}</p>
+                  </div>
+                )}
+
+                {/* Actions */}
+                <div className="flex items-center justify-end gap-3 pt-2">
+                  {!examSubmitted ? (
+                    <button
+                      onClick={handleSubmitExamOption}
+                      disabled={examSelectedOpt === null}
+                      className="rounded-xl bg-emerald-600 px-5 py-2.5 text-xs font-bold text-white hover:bg-emerald-500 disabled:opacity-50 transition-colors shadow-lg shadow-emerald-950"
+                    >
+                      Submit Answer
+                    </button>
+                  ) : (
+                    <button
+                      onClick={handleNextExamQuestion}
+                      className="flex items-center gap-1.5 rounded-xl bg-emerald-600 px-5 py-2.5 text-xs font-bold text-white hover:bg-emerald-500 transition-colors shadow-lg shadow-emerald-950"
+                    >
+                      <span>
+                        {examQIndex < OLYMPIAD_QUESTIONS.length - 1 ? "Next Problem" : "Finish Qualifier"}
+                      </span>
+                      <ArrowRight className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            ) : (
+              /* Examination Finished Screen */
+              <div className="space-y-5 text-center py-4">
+                <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-950 border border-emerald-500/40 text-emerald-400">
+                  <Trophy className="w-8 h-8" />
+                </div>
+
+                <div className="space-y-1">
+                  <h4 className="font-display text-xl font-bold text-white">
+                    Qualifier Round Completed
+                  </h4>
+                  <p className="text-xs text-slate-300">
+                    Your score has been registered server-authoritatively to the Olympiad Derby standings.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 max-w-sm mx-auto text-left">
+                  <div className="rounded-xl border border-slate-800 bg-slate-950 p-3.5">
+                    <span className="text-[11px] text-slate-400 block font-mono">Accuracy</span>
+                    <span className="font-mono text-xl font-bold text-emerald-400">
+                      {examScore} / {OLYMPIAD_QUESTIONS.length} Correct
+                    </span>
+                  </div>
+                  <div className="rounded-xl border border-slate-800 bg-slate-950 p-3.5">
+                    <span className="text-[11px] text-slate-400 block font-mono">Merit Conferred</span>
+                    <span className="font-mono text-xl font-bold text-amber-400">
+                      +{120 + examScore * 25} XP
+                    </span>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => {
+                    sounds.playClick();
+                    setActiveExamTourney(null);
+                    setActiveTab("leaderboard");
+                  }}
+                  className="rounded-xl bg-emerald-600 px-6 py-2.5 text-xs font-bold text-white hover:bg-emerald-500 transition-colors shadow-lg shadow-emerald-950"
+                >
+                  View Updated National Standings
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}

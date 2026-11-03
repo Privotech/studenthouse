@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Navbar } from "@/components/Navbar";
 import { BottomNav } from "@/components/BottomNav";
 import { HomeView } from "@/components/HomeView";
@@ -13,6 +13,7 @@ import { PlayerProfileView } from "@/components/PlayerProfileView";
 import { ParentAndSchoolPortal } from "@/components/ParentAndSchoolPortal";
 import { AdminModerationModal } from "@/components/AdminModerationModal";
 import { RoadmapModal } from "@/components/RoadmapModal";
+import { AuthModal } from "@/components/AuthModal";
 import { AgeZone, CreativeSubmissionItem, NavTab, PlayerState } from "@/types/naijaplay";
 import { CREATIVE_SUBMISSIONS, INITIAL_MISSIONS, INITIAL_PLAYER } from "@/data/mockData";
 import { sounds } from "@/lib/audio";
@@ -26,6 +27,71 @@ export default function NaijaPlayApp() {
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [isRoadmapOpen, setIsRoadmapOpen] = useState(false);
   const [isAdminOpen, setIsAdminOpen] = useState(false);
+  const [isAuthOpen, setIsAuthOpen] = useState(false);
+  const [authDefaultTab, setAuthDefaultTab] = useState<"signin" | "register">("signin");
+  const [isAuthenticated, setIsAuthenticated] = useState(true);
+
+  // Restore authenticated session from localStorage or verify token with NeonDB
+  useEffect(() => {
+    const token = typeof window !== "undefined" ? localStorage.getItem("np_session_token") : null;
+    if (token) {
+      fetch("/api/auth/me", {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.authenticated && data.user) {
+            setIsAuthenticated(true);
+            setPlayer((prev) => ({
+              ...prev,
+              displayName: data.user.display_name,
+              avatarInitials: data.user.avatar_initials,
+              avatarCrest: data.user.avatar_crest,
+              ageZone: data.user.age_zone,
+              age: data.user.age,
+              level: data.user.level,
+              xp: data.user.xp,
+              streakDays: data.user.streak_days,
+              school: data.user.school,
+              state: data.user.state,
+            }));
+          }
+        })
+        .catch(() => {});
+    }
+  }, []);
+
+  const handleAuthSuccess = (userData: Partial<PlayerState> & { email: string; username: string }) => {
+    setIsAuthenticated(true);
+    setPlayer((prev) => ({
+      ...prev,
+      ...userData,
+    }));
+    sounds.playLevelUp();
+    showToast(`Welcome ${userData.displayName || userData.username}! Profile authenticated with NeonDB.`);
+  };
+
+  const handleSignOut = async () => {
+    try {
+      const token = typeof window !== "undefined" ? localStorage.getItem("np_session_token") : null;
+      await fetch("/api/auth/logout", {
+        method: "POST",
+        headers: { Authorization: token ? `Bearer ${token}` : "" },
+      });
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("np_session_token");
+      }
+    } catch {}
+
+    setIsAuthenticated(false);
+    setPlayer({
+      ...INITIAL_PLAYER,
+      displayName: "Guest Scholar",
+      avatarInitials: "GS",
+      school: "Visitor Portal",
+    });
+    showToast("Signed out. Operating in guest session.");
+  };
 
   // Floating notification toast
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -209,6 +275,14 @@ export default function NaijaPlayApp() {
         }}
         onOpenRoadmap={() => setIsRoadmapOpen(true)}
         onOpenPortals={() => setActiveTab("portals")}
+        onOpenAuth={(tab) => {
+          setAuthDefaultTab(tab || "signin");
+          setIsAuthOpen(true);
+        }}
+        isAuthenticated={isAuthenticated}
+        userName={player.displayName}
+        userInitials={player.avatarInitials}
+        onSignOut={handleSignOut}
       />
 
       {/* Floating XP Toast */}
@@ -278,6 +352,10 @@ export default function NaijaPlayApp() {
             onUpdateAvatarCrest={handleUpdateAvatarCrest}
             onUpdateName={handleUpdateName}
             onUpdateAge={handleUpdateAge}
+            onOpenAuth={(tab) => {
+              setAuthDefaultTab(tab || "signin");
+              setIsAuthOpen(true);
+            }}
           />
         )}
 
@@ -329,6 +407,14 @@ export default function NaijaPlayApp() {
       <AdminModerationModal
         isOpen={isAdminOpen}
         onClose={() => setIsAdminOpen(false)}
+      />
+
+      {/* NeonDB Authentication Modal (Sign In / Register) */}
+      <AuthModal
+        isOpen={isAuthOpen}
+        onClose={() => setIsAuthOpen(false)}
+        onAuthSuccess={handleAuthSuccess}
+        defaultTab={authDefaultTab}
       />
     </div>
   );
