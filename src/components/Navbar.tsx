@@ -43,17 +43,17 @@ export const Navbar: React.FC<NavbarProps> = ({
   };
 
   return (
-    <header className="sticky top-0 z-40 border-b border-slate-800 bg-[#0B111E]/95 backdrop-blur-md px-4 sm:px-6 py-3">
-      <div className="mx-auto flex max-w-7xl items-center justify-between gap-4">
+    <header className="sticky top-0 z-40 border-b border-slate-800 bg-[#0B111E]/95 backdrop-blur-md px-3 sm:px-6 py-2 sm:py-3">
+      <div className="mx-auto flex max-w-7xl items-center justify-between gap-2 sm:gap-4">
         {/* Brand & Identity */}
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2.5">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-green-700 shadow-lg shadow-emerald-900/30 font-bold font-mono text-white text-base">
+            <div className="flex h-8 w-8 sm:h-10 sm:w-10 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-green-700 shadow-lg shadow-emerald-900/30 font-bold font-mono text-white text-sm sm:text-base">
               NP
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="font-display text-xl font-extrabold tracking-tight text-white">
+                <span className="font-display text-lg sm:text-xl font-extrabold tracking-tight text-white">
                   NaijaPlay
                 </span>
                 <span className="hidden sm:inline-block rounded-md bg-slate-900 border border-slate-800 px-2 py-0.5 text-[10px] font-mono font-semibold text-emerald-400">
@@ -68,7 +68,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
 
         {/* Central Controls: Age Zone Switcher (Ages 6 to 30) */}
-        <div className="hidden lg:flex items-center gap-1 rounded-xl bg-slate-900/90 border border-slate-800 p-1">
+        <div className="hidden xl:flex items-center gap-1 rounded-xl bg-slate-900/90 border border-slate-800 p-1">
           <button
             onClick={() => {
               sounds.playClick();
@@ -124,9 +124,9 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
 
         {/* Right Stats & Actions */}
-        <div className="flex items-center gap-2 sm:gap-3">
+        <div className="flex shrink-0 items-center gap-1 sm:gap-2 sm:gap-3">
           {/* Daily Streak */}
-          <div className="flex items-center gap-1.5 rounded-lg bg-slate-900 border border-slate-800 px-2.5 py-1 text-xs font-semibold text-amber-400 font-mono">
+          <div className="hidden xl:flex items-center gap-1.5 rounded-lg bg-slate-900 border border-slate-800 px-2.5 py-1 text-xs font-semibold text-amber-400 font-mono">
             <Flame className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
             <span>{streakDays}d Streak</span>
           </div>
@@ -134,7 +134,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* Player Level & XP */}
           <div className="flex items-center gap-1.5 rounded-lg bg-emerald-950/60 border border-emerald-800/40 px-2.5 py-1 text-xs font-bold text-emerald-300 font-mono">
             <span>Lvl {level}</span>
-            <span className="text-slate-400 text-[11px] hidden sm:inline">
+            <span className="text-slate-400 text-[11px] hidden xl:inline">
               ({xp} XP)
             </span>
           </div>
@@ -162,7 +162,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               sounds.playClick();
               onOpenRoadmap();
             }}
-            className="hidden sm:inline-flex items-center gap-1.5 rounded-lg border border-slate-800 bg-slate-900 px-3 py-1.5 text-xs font-medium text-slate-300 hover:text-white hover:border-slate-700 transition-colors"
+            className="hidden xl:inline-flex items-center gap-1.5 rounded-lg border border-slate-800 bg-slate-900 px-3 py-1.5 text-xs font-medium text-slate-300 hover:text-white hover:border-slate-700 transition-colors"
           >
             <Map className="w-3.5 h-3.5 text-emerald-400" />
             <span>Roadmap</span>
@@ -174,10 +174,10 @@ export const Navbar: React.FC<NavbarProps> = ({
               sounds.playClick();
               onOpenPortals();
             }}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-800 bg-slate-900 px-3 py-1.5 text-xs font-medium text-slate-300 hover:text-white hover:border-slate-700 transition-colors"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-800 bg-slate-900 px-1 sm:px-3 py-1.5 text-xs font-medium text-slate-300 hover:text-white hover:border-slate-700 transition-colors"
           >
             <Shield className="w-3.5 h-3.5 text-emerald-400" />
-            <span className="hidden sm:inline">Portals</span>
+            <span className="hidden xl:inline">Portals</span>
           </button>
 
           {/* PWA Install Button */}
