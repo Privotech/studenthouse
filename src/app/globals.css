@@ -1,6 +1,12 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+:root {
+  --font-display: "Trebuchet MS";
+  --font-body: Arial;
+  --font-mono: Consolas;
+}
+
 @layer base {
   body {
     font-family: var(--font-body), sans-serif;

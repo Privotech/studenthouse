@@ -1,24 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Plus_Jakarta_Sans, DM_Sans, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
-
-const plusJakarta = Plus_Jakarta_Sans({
-  subsets: ["latin"],
-  weight: ["600", "700"],
-  variable: "--font-display",
-});
-
-const dmSans = DM_Sans({
-  subsets: ["latin"],
-  weight: ["400", "500", "600"],
-  variable: "--font-body",
-});
-
-const jetbrainsMono = JetBrains_Mono({
-  subsets: ["latin"],
-  weight: ["400", "500"],
-  variable: "--font-mono",
-});
 
 export const viewport: Viewport = {
   themeColor: "#059669",
@@ -55,10 +36,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html
-      lang="en"
-      className={`${plusJakarta.variable} ${dmSans.variable} ${jetbrainsMono.variable} dark`}
-    >
+    <html lang="en" className="dark">
       <body suppressHydrationWarning className="min-h-screen bg-[#0B111E] text-slate-100 selection:bg-emerald-500/30 selection:text-emerald-200">
         {children}
       </body>
