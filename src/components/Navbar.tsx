@@ -1,6 +1,7 @@
 "use client";
 
-import { Volume2, VolumeX, Flame, Sparkles, Map, Shield, KeyRound, LogIn, LogOut, UserCheck } from "lucide-react";
+import { Volume2, VolumeX, Flame, Map, Shield, KeyRound, LogIn, LogOut, Menu, X } from "lucide-react";
+import { useState } from "react";
 import { AgeZone } from "@/types/naijaplay";
 import { sounds } from "@/lib/audio";
 import { PWAInstallButton } from "@/components/PWAInstallButton";
@@ -38,6 +39,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   userInitials,
   onSignOut,
 }) => {
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
   const getZoneLabel = (zone: AgeZone) => {
     switch (zone) {
       case "JUNIOR":
@@ -74,6 +77,22 @@ export const Navbar: React.FC<NavbarProps> = ({
               </p>
             </div>
           </div>
+        </div>
+
+        <div className="flex items-center gap-2 sm:hidden">
+          <div className="rounded-lg border border-emerald-800/40 bg-emerald-950/60 px-2.5 py-1.5 text-xs font-bold text-emerald-300 font-mono">
+            Lvl {level}
+          </div>
+          <button
+            type="button"
+            onClick={() => setMobileMenuOpen((isOpen) => !isOpen)}
+            aria-label={mobileMenuOpen ? "Close navigation menu" : "Open navigation menu"}
+            aria-expanded={mobileMenuOpen}
+            aria-controls="mobile-navbar-menu"
+            className="flex h-10 w-10 items-center justify-center rounded-lg border border-slate-800 bg-slate-900 text-slate-300 transition-colors hover:border-slate-700 hover:text-white"
+          >
+            {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+          </button>
         </div>
 
         {/* Central Controls: Age Zone Switcher (Ages 6 to 30) */}
@@ -133,7 +152,32 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
 
         {/* Right Stats & Actions */}
-        <div className="flex w-full shrink-0 items-center justify-between gap-1 sm:w-auto sm:justify-end sm:gap-2 lg:gap-3 xl:gap-3.5">
+        <div
+          id="mobile-navbar-menu"
+          className={`${mobileMenuOpen ? "flex" : "hidden"} w-full shrink-0 flex-wrap items-center justify-start gap-2 rounded-xl border border-slate-800 bg-slate-950/80 p-2 sm:w-auto sm:justify-end sm:gap-2 sm:border-0 sm:bg-transparent sm:p-0 lg:gap-3 xl:gap-3.5 sm:flex`}
+        >
+          <div className="flex w-full flex-wrap items-center gap-1 rounded-lg bg-slate-900/90 p-1 sm:hidden">
+            {(["JUNIOR", "TEEN", "YOUTH", "SENIOR"] as const).map((zone) => (
+              <button
+                key={zone}
+                type="button"
+                onClick={() => {
+                  sounds.playClick();
+                  onZoneChange(zone);
+                  setMobileMenuOpen(false);
+                }}
+                aria-pressed={ageZone === zone}
+                className={`flex-1 rounded-md px-2 py-2 text-[11px] font-semibold transition-colors ${
+                  ageZone === zone
+                    ? "bg-emerald-600 text-white"
+                    : "text-slate-400 hover:text-white"
+                }`}
+              >
+                {zone === "JUNIOR" ? "Junior" : zone === "TEEN" ? "Teen" : zone === "YOUTH" ? "Youth" : "Senior"}
+              </button>
+            ))}
+          </div>
+
           {/* Daily Streak */}
           <div className="hidden 2xl:flex items-center gap-1.5 rounded-lg bg-slate-900 border border-slate-800 px-2.5 py-1.5 text-xs font-semibold text-amber-400 font-mono">
             <Flame className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
@@ -141,7 +185,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
 
           {/* Player Level & XP */}
-          <div className="flex items-center gap-1.5 rounded-lg bg-emerald-950/60 border border-emerald-800/40 px-2.5 py-1.5 text-xs font-bold text-emerald-300 font-mono">
+          <div className="hidden sm:flex items-center gap-1.5 rounded-lg bg-emerald-950/60 border border-emerald-800/40 px-2.5 py-1.5 text-xs font-bold text-emerald-300 font-mono">
             <span>Lvl {level}</span>
             <span className="text-slate-400 text-[11px] hidden 2xl:inline">
               ({xp} XP)
@@ -155,6 +199,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 onClick={() => {
                   sounds.playClick();
                   onOpenAuth("signin");
+                  setMobileMenuOpen(false);
                 }}
                 className="flex items-center gap-2 rounded-lg border border-emerald-700/50 bg-emerald-950/40 px-2.5 py-1.5 text-xs font-bold text-white hover:border-emerald-500 transition-colors"
                 title={`Signed in as ${userName}. Click to view security details.`}
@@ -171,6 +216,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 onClick={() => {
                   sounds.playClick();
                   onSignOut();
+                  setMobileMenuOpen(false);
                 }}
                 title="Sign Out"
                 className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-800 bg-slate-900 text-slate-400 hover:text-rose-400 hover:border-rose-800/60 transition-colors"
@@ -185,6 +231,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 onClick={() => {
                   sounds.playClick();
                   onOpenAuth("signin");
+                  setMobileMenuOpen(false);
                 }}
                 className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2.5 text-xs font-bold text-slate-200 hover:text-white hover:border-slate-600 transition-colors"
               >
@@ -195,6 +242,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 onClick={() => {
                   sounds.playClick();
                   onOpenAuth("register");
+                  setMobileMenuOpen(false);
                 }}
                 className="hidden sm:inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-2.5 text-xs font-bold text-white hover:bg-emerald-500 shadow-sm transition-colors"
               >
@@ -209,6 +257,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             onClick={() => {
               sounds.playClick();
               onToggleSound();
+              setMobileMenuOpen(false);
             }}
             title={soundEnabled ? "Mute sounds" : "Enable sounds"}
             className="flex h-10 w-10 items-center justify-center rounded-lg border border-slate-800 bg-slate-900 text-slate-400 hover:text-white hover:border-slate-700 transition-colors"
@@ -226,6 +275,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             onClick={() => {
               sounds.playClick();
               onOpenRoadmap();
+              setMobileMenuOpen(false);
             }}
             className="hidden 2xl:inline-flex items-center gap-1.5 rounded-lg border border-slate-800 bg-slate-900 px-3 py-2.5 text-xs font-medium text-slate-300 hover:text-white hover:border-slate-700 transition-colors"
           >
@@ -238,6 +288,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             onClick={() => {
               sounds.playClick();
               onOpenPortals();
+              setMobileMenuOpen(false);
             }}
             className="inline-flex items-center gap-1.5 rounded-lg border border-slate-800 bg-slate-900 px-2 sm:px-3 py-2.5 text-xs font-medium text-slate-300 hover:text-white hover:border-slate-700 transition-colors"
           >

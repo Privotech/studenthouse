@@ -259,7 +259,7 @@ export default function NaijaPlayApp() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0B111E] text-slate-100 flex flex-col font-sans pb-20 selection:bg-emerald-500/30 selection:text-emerald-200">
+    <div className="min-h-screen bg-[#0B111E] text-slate-100 flex flex-col font-sans pb-24 selection:bg-emerald-500/30 selection:text-emerald-200">
       {/* Top Bar */}
       <Navbar
         ageZone={player.ageZone}
