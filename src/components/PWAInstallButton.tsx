@@ -19,7 +19,7 @@ export const PWAInstallButton: React.FC = () => {
         onClick={install}
         aria-label="Install NaijaPlay"
         title="Install NaijaPlay"
-        className="inline-flex items-center gap-1 sm:gap-2 rounded-lg bg-emerald-600 px-2 sm:px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-500 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+        className="inline-flex h-10 items-center gap-1 sm:gap-2 rounded-lg bg-emerald-600 px-2.5 sm:px-4 py-2.5 text-xs font-semibold text-white hover:bg-emerald-500 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
       >
         <Download className="w-3.5 h-3.5" />
         <span className="hidden xl:inline">Install PWA</span>
@@ -34,7 +34,7 @@ export const PWAInstallButton: React.FC = () => {
         onClick={() => setShowModal(true)}
         aria-label={isIOS ? "Install NaijaPlay on iOS" : "Progressive web app information"}
         title={isIOS ? "Install NaijaPlay on iOS" : "Progressive web app information"}
-        className="inline-flex items-center gap-1 sm:gap-2 rounded-lg bg-emerald-600 px-2 sm:px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-500 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+        className="inline-flex h-10 items-center gap-1 sm:gap-2 rounded-lg bg-emerald-600 px-2.5 sm:px-4 py-2.5 text-xs font-semibold text-white hover:bg-emerald-500 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
       >
         <Smartphone className="w-3.5 h-3.5" />
         <span className="hidden xl:inline">{isIOS ? "Install on iOS" : "PWA Spec"}</span>

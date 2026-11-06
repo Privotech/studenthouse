@@ -93,6 +93,7 @@ export const CompetitionArena: React.FC<CompetitionArenaProps> = ({
     setExamFinished(false);
   };
 
+
   const handleSelectExamOption = (idx: number) => {
     if (examSubmitted) return;
     sounds.playClick();

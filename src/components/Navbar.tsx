@@ -52,24 +52,24 @@ export const Navbar: React.FC<NavbarProps> = ({
   };
 
   return (
-    <header className="sticky top-0 z-40 border-b border-slate-800 bg-[#0B111E]/95 backdrop-blur-md px-3 sm:px-6 py-2 sm:py-3">
-      <div className="mx-auto flex max-w-7xl items-center justify-between gap-2 sm:gap-4">
+    <header className="sticky top-0 z-40 border-b border-slate-800 bg-[#0B111E]/95 backdrop-blur-md px-2 sm:px-4 lg:px-3 py-3 sm:py-4">
+      <div className="mx-auto flex max-w-[1600px] flex-wrap items-center justify-between gap-3 sm:gap-4 lg:gap-5">
         {/* Brand & Identity */}
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 sm:h-10 sm:w-10 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-green-700 shadow-lg shadow-emerald-900/30 font-bold font-mono text-white text-sm sm:text-base">
+        <div className="flex min-w-0 flex-1 items-center gap-3">
+          <div className="flex items-center gap-2.5 sm:gap-3">
+            <div className="flex h-10 w-10 sm:h-12 sm:w-12 lg:h-14 lg:w-14 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-green-700 shadow-lg shadow-emerald-900/30 font-bold font-mono text-white text-base sm:text-lg lg:text-xl">
               NP
             </div>
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <span className="font-display text-lg sm:text-xl font-extrabold tracking-tight text-white">
+                <span className="font-display text-xl sm:text-2xl lg:text-[2rem] font-extrabold tracking-tight text-white">
                   NaijaPlay
                 </span>
-                <span className="hidden sm:inline-block rounded-md bg-slate-900 border border-slate-800 px-2 py-0.5 text-[10px] font-mono font-semibold text-emerald-400">
+                <span className="hidden sm:inline-block rounded-md bg-slate-900 border border-slate-800 px-2 py-0.5 text-[10px] lg:text-[11px] font-mono font-semibold text-emerald-400">
                   {getZoneLabel(ageZone)}
                 </span>
               </div>
-              <p className="hidden md:block text-[11px] text-slate-400">
+              <p className="hidden md:block text-[11px] lg:text-xs text-slate-400">
                 Play. Learn. Compete. Become. · African Academic & Entertainment Ecosystem
               </p>
             </div>
@@ -77,13 +77,13 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
 
         {/* Central Controls: Age Zone Switcher (Ages 6 to 30) */}
-        <div className="hidden xl:flex items-center gap-1 rounded-xl bg-slate-900/90 border border-slate-800 p-1">
+        <div className="hidden 2xl:flex items-center gap-1 rounded-xl bg-slate-900/90 border border-slate-800 p-1.5">
           <button
             onClick={() => {
               sounds.playClick();
               onZoneChange("JUNIOR");
             }}
-            className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all ${
+            className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-all ${
               ageZone === "JUNIOR"
                 ? "bg-emerald-600 text-white shadow-sm font-bold"
                 : "text-slate-400 hover:text-white"
@@ -96,7 +96,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               sounds.playClick();
               onZoneChange("TEEN");
             }}
-            className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all ${
+            className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-all ${
               ageZone === "TEEN"
                 ? "bg-emerald-600 text-white shadow-sm font-bold"
                 : "text-slate-400 hover:text-white"
@@ -109,7 +109,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               sounds.playClick();
               onZoneChange("YOUTH");
             }}
-            className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all ${
+            className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-all ${
               ageZone === "YOUTH"
                 ? "bg-emerald-600 text-white shadow-sm font-bold"
                 : "text-slate-400 hover:text-white"
@@ -122,7 +122,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               sounds.playClick();
               onZoneChange("SENIOR");
             }}
-            className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all ${
+            className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-all ${
               ageZone === "SENIOR"
                 ? "bg-emerald-600 text-white shadow-sm font-bold"
                 : "text-slate-400 hover:text-white"
@@ -133,17 +133,17 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
 
         {/* Right Stats & Actions */}
-        <div className="flex shrink-0 items-center gap-1 sm:gap-2 sm:gap-3">
+        <div className="flex w-full shrink-0 items-center justify-between gap-1 sm:w-auto sm:justify-end sm:gap-2 lg:gap-3 xl:gap-3.5">
           {/* Daily Streak */}
-          <div className="hidden xl:flex items-center gap-1.5 rounded-lg bg-slate-900 border border-slate-800 px-2.5 py-1 text-xs font-semibold text-amber-400 font-mono">
+          <div className="hidden 2xl:flex items-center gap-1.5 rounded-lg bg-slate-900 border border-slate-800 px-2.5 py-1.5 text-xs font-semibold text-amber-400 font-mono">
             <Flame className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
             <span>{streakDays}d Streak</span>
           </div>
 
           {/* Player Level & XP */}
-          <div className="flex items-center gap-1.5 rounded-lg bg-emerald-950/60 border border-emerald-800/40 px-2.5 py-1 text-xs font-bold text-emerald-300 font-mono">
+          <div className="flex items-center gap-1.5 rounded-lg bg-emerald-950/60 border border-emerald-800/40 px-2.5 py-1.5 text-xs font-bold text-emerald-300 font-mono">
             <span>Lvl {level}</span>
-            <span className="text-slate-400 text-[11px] hidden xl:inline">
+            <span className="text-slate-400 text-[11px] hidden 2xl:inline">
               ({xp} XP)
             </span>
           </div>
@@ -156,7 +156,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   sounds.playClick();
                   onOpenAuth("signin");
                 }}
-                className="flex items-center gap-2 rounded-lg border border-emerald-700/50 bg-emerald-950/40 px-2.5 py-1 text-xs font-bold text-white hover:border-emerald-500 transition-colors"
+                className="flex items-center gap-2 rounded-lg border border-emerald-700/50 bg-emerald-950/40 px-2.5 py-1.5 text-xs font-bold text-white hover:border-emerald-500 transition-colors"
                 title={`Signed in as ${userName}. Click to view security details.`}
               >
                 <div className="flex h-5 w-5 items-center justify-center rounded-md bg-emerald-600 text-[10px] font-mono text-white">
@@ -173,7 +173,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   onSignOut();
                 }}
                 title="Sign Out"
-                className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-800 bg-slate-900 text-slate-400 hover:text-rose-400 hover:border-rose-800/60 transition-colors"
+                className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-800 bg-slate-900 text-slate-400 hover:text-rose-400 hover:border-rose-800/60 transition-colors"
                 aria-label="Sign out"
               >
                 <LogOut className="w-3.5 h-3.5" />
@@ -186,7 +186,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   sounds.playClick();
                   onOpenAuth("signin");
                 }}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1 text-xs font-bold text-slate-200 hover:text-white hover:border-slate-600 transition-colors"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2.5 text-xs font-bold text-slate-200 hover:text-white hover:border-slate-600 transition-colors"
               >
                 <LogIn className="w-3.5 h-3.5 text-emerald-400" />
                 <span>Sign In</span>
@@ -196,7 +196,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   sounds.playClick();
                   onOpenAuth("register");
                 }}
-                className="hidden sm:inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-2.5 py-1 text-xs font-bold text-white hover:bg-emerald-500 shadow-sm transition-colors"
+                className="hidden sm:inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-2.5 text-xs font-bold text-white hover:bg-emerald-500 shadow-sm transition-colors"
               >
                 <KeyRound className="w-3.5 h-3.5" />
                 <span>Register</span>
@@ -211,7 +211,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               onToggleSound();
             }}
             title={soundEnabled ? "Mute sounds" : "Enable sounds"}
-            className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-800 bg-slate-900 text-slate-400 hover:text-white hover:border-slate-700 transition-colors"
+            className="flex h-10 w-10 items-center justify-center rounded-lg border border-slate-800 bg-slate-900 text-slate-400 hover:text-white hover:border-slate-700 transition-colors"
             aria-label="Toggle sound"
           >
             {soundEnabled ? (
@@ -227,7 +227,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               sounds.playClick();
               onOpenRoadmap();
             }}
-            className="hidden xl:inline-flex items-center gap-1.5 rounded-lg border border-slate-800 bg-slate-900 px-3 py-1.5 text-xs font-medium text-slate-300 hover:text-white hover:border-slate-700 transition-colors"
+            className="hidden 2xl:inline-flex items-center gap-1.5 rounded-lg border border-slate-800 bg-slate-900 px-3 py-2.5 text-xs font-medium text-slate-300 hover:text-white hover:border-slate-700 transition-colors"
           >
             <Map className="w-3.5 h-3.5 text-emerald-400" />
             <span>Roadmap</span>
@@ -239,10 +239,10 @@ export const Navbar: React.FC<NavbarProps> = ({
               sounds.playClick();
               onOpenPortals();
             }}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-800 bg-slate-900 px-1 sm:px-3 py-1.5 text-xs font-medium text-slate-300 hover:text-white hover:border-slate-700 transition-colors"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-800 bg-slate-900 px-2 sm:px-3 py-2.5 text-xs font-medium text-slate-300 hover:text-white hover:border-slate-700 transition-colors"
           >
             <Shield className="w-3.5 h-3.5 text-emerald-400" />
-            <span className="hidden xl:inline">Portals</span>
+            <span className="hidden 2xl:inline">Portals</span>
           </button>
 
           {/* PWA Install Button */}
