@@ -8,9 +8,9 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: "NaijaPlay — Phase 1 Architecture & Foundation",
+  title: "NaijaPlay — African Youth Learning, Games & Competition Ecosystem",
   description:
-    "Production-grade technical foundation, modular monolith architecture, 26-model Prisma schema, age-aware RBAC/ABAC policy engine, server-authoritative XP ledger, and NDPA child-safety framework for NaijaPlay.",
+    "Activity-first African youth learning and entertainment ecosystem with Neon PostgreSQL authentication, age-calibrated learning modules, Photoshop-style creative studio, and interscholastic Olympiad competitions.",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
@@ -21,16 +21,16 @@ export const metadata: Metadata = {
     apple: "/icon.svg",
   },
   openGraph: {
-    title: "NaijaPlay — Phase 1 Architecture & Foundation",
+    title: "NaijaPlay — African Youth Learning, Games & Competition Ecosystem",
     description:
-      "Production-grade technical foundation, modular monolith architecture, 26-model Prisma schema, age-aware RBAC/ABAC policy engine, server-authoritative XP ledger, and NDPA child-safety framework for NaijaPlay.",
+      "Activity-first African youth learning and entertainment ecosystem with Neon PostgreSQL authentication, age-calibrated learning modules, Photoshop-style creative studio, and interscholastic Olympiad competitions.",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "NaijaPlay — Phase 1 Architecture & Foundation",
+    title: "NaijaPlay — African Youth Learning, Games & Competition Ecosystem",
     description:
-      "Production-grade technical foundation, modular monolith architecture, 26-model Prisma schema, age-aware RBAC/ABAC policy engine, server-authoritative XP ledger, and NDPA child-safety framework for NaijaPlay.",
+      "Activity-first African youth learning and entertainment ecosystem with Neon PostgreSQL authentication, age-calibrated learning modules, Photoshop-style creative studio, and interscholastic Olympiad competitions.",
   },
 };
 

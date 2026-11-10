@@ -194,10 +194,10 @@ export const HomeView: React.FC<HomeViewProps> = ({
                   </button>
                 ) : (
                   <button
-                    onClick={() => onNavigateTab("learn")}
-                    className="w-full rounded-xl border border-slate-800 bg-slate-900 py-2 text-xs font-semibold text-slate-300 hover:text-white"
+                    onClick={() => onNavigateTab(mission.targetRoute || "games")}
+                    className="w-full rounded-xl border border-slate-800 bg-slate-900 py-2 text-xs font-semibold text-slate-300 hover:text-white hover:border-emerald-500/50 transition-colors"
                   >
-                    View Subject
+                    Start Task →
                   </button>
                 )}
               </div>

@@ -64,7 +64,7 @@ const fallbackAuditLogs: DbAuditLog[] = [];
 // Seed default verified test account
 const DEFAULT_SALT = "a1b2c3d4e5f67890a1b2c3d4e5f67890";
 // Hash for "Naija2026!" with salt and 100k iterations
-const DEFAULT_HASH = "8c6b7596d19488b3f2dbd6ec0373e34b7a2d48bf62d665a3106aa0a01211e4f48b117865c36398f6a91176bc5d36e2f694602fbcdd78810c9509df14d0238e83";
+const DEFAULT_HASH = "428f87a49f78d64a8044acc8645dca32c4431133942f0968966c94b53927056b13166edb9eabdbb6baf0a741e32f6c372e04d654ef4a069da02829fa270f1987";
 
 const SEED_USER: DbUser = {
   id: "usr_chisom_okafor_2026",
@@ -81,9 +81,9 @@ const SEED_USER: DbUser = {
   avatar_crest: "Vanguard",
   avatar_initials: "CO",
   role: "STUDENT",
-  level: 14,
-  xp: 4850,
-  streak_days: 12,
+  level: 1,
+  xp: 100, // 100 Welcome Bonus XP
+  streak_days: 1,
   failed_attempts: 0,
   locked_until: null,
   created_at: new Date().toISOString(),

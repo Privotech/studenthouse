@@ -95,88 +95,112 @@ export const Navbar: React.FC<NavbarProps> = ({
           </button>
         </div>
 
-        {/* Central Controls: Age Zone Switcher (Ages 6 to 30) */}
-        <div className="hidden 2xl:flex items-center gap-1 rounded-xl bg-slate-900/90 border border-slate-800 p-1.5">
-          <button
-            onClick={() => {
-              sounds.playClick();
-              onZoneChange("JUNIOR");
-            }}
-            className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-all ${
-              ageZone === "JUNIOR"
-                ? "bg-emerald-600 text-white shadow-sm font-bold"
-                : "text-slate-400 hover:text-white"
-            }`}
-          >
-            Junior (6–12)
-          </button>
-          <button
-            onClick={() => {
-              sounds.playClick();
-              onZoneChange("TEEN");
-            }}
-            className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-all ${
-              ageZone === "TEEN"
-                ? "bg-emerald-600 text-white shadow-sm font-bold"
-                : "text-slate-400 hover:text-white"
-            }`}
-          >
-            Teen (13–17)
-          </button>
-          <button
-            onClick={() => {
-              sounds.playClick();
-              onZoneChange("YOUTH");
-            }}
-            className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-all ${
-              ageZone === "YOUTH"
-                ? "bg-emerald-600 text-white shadow-sm font-bold"
-                : "text-slate-400 hover:text-white"
-            }`}
-          >
-            Youth (18–24)
-          </button>
-          <button
-            onClick={() => {
-              sounds.playClick();
-              onZoneChange("SENIOR");
-            }}
-            className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-all ${
-              ageZone === "SENIOR"
-                ? "bg-emerald-600 text-white shadow-sm font-bold"
-                : "text-slate-400 hover:text-white"
-            }`}
-          >
-            Senior (25–30)
-          </button>
-        </div>
+        {/* Central Controls: Age Tier (Locked when signed in / registered) */}
+        {isAuthenticated ? (
+          <div className="hidden xl:flex items-center gap-2 rounded-xl bg-slate-900/90 border border-emerald-900/40 px-3.5 py-1.5 shadow-inner">
+            <span className="flex h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+            <div className="flex items-center gap-1.5 font-mono text-xs">
+              <span className="text-slate-400">Academic Tier:</span>
+              <span className="font-bold text-emerald-300">{getZoneLabel(ageZone)}</span>
+            </div>
+            <span className="ml-1 rounded bg-slate-800 border border-slate-700 px-1.5 py-0.5 text-[10px] font-mono text-slate-400 flex items-center gap-1" title="Age tier is permanently calibrated to your verified academic record and cannot be changed">
+              <Shield className="w-3 h-3 text-emerald-400" />
+              <span>Calibrated & Locked</span>
+            </span>
+          </div>
+        ) : (
+          <div className="hidden 2xl:flex items-center gap-1 rounded-xl bg-slate-900/90 border border-slate-800 p-1.5">
+            <button
+              onClick={() => {
+                sounds.playClick();
+                onZoneChange("JUNIOR");
+              }}
+              className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-all ${
+                ageZone === "JUNIOR"
+                  ? "bg-emerald-600 text-white shadow-sm font-bold"
+                  : "text-slate-400 hover:text-white"
+              }`}
+            >
+              Junior (6–12)
+            </button>
+            <button
+              onClick={() => {
+                sounds.playClick();
+                onZoneChange("TEEN");
+              }}
+              className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-all ${
+                ageZone === "TEEN"
+                  ? "bg-emerald-600 text-white shadow-sm font-bold"
+                  : "text-slate-400 hover:text-white"
+              }`}
+            >
+              Teen (13–17)
+            </button>
+            <button
+              onClick={() => {
+                sounds.playClick();
+                onZoneChange("YOUTH");
+              }}
+              className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-all ${
+                ageZone === "YOUTH"
+                  ? "bg-emerald-600 text-white shadow-sm font-bold"
+                  : "text-slate-400 hover:text-white"
+              }`}
+            >
+              Youth (18–24)
+            </button>
+            <button
+              onClick={() => {
+                sounds.playClick();
+                onZoneChange("SENIOR");
+              }}
+              className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-all ${
+                ageZone === "SENIOR"
+                  ? "bg-emerald-600 text-white shadow-sm font-bold"
+                  : "text-slate-400 hover:text-white"
+              }`}
+            >
+              Senior (25–30)
+            </button>
+          </div>
+        )}
 
         {/* Right Stats & Actions */}
         <div
           id="mobile-navbar-menu"
           className={`${mobileMenuOpen ? "flex" : "hidden"} w-full shrink-0 flex-wrap items-center justify-start gap-2 rounded-xl border border-slate-800 bg-slate-950/80 p-2 sm:w-auto sm:justify-end sm:gap-2 sm:border-0 sm:bg-transparent sm:p-0 lg:gap-3 xl:gap-3.5 sm:flex`}
         >
-          <div className="flex w-full flex-wrap items-center gap-1 rounded-lg bg-slate-900/90 p-1 sm:hidden">
-            {(["JUNIOR", "TEEN", "YOUTH", "SENIOR"] as const).map((zone) => (
-              <button
-                key={zone}
-                type="button"
-                onClick={() => {
-                  sounds.playClick();
-                  onZoneChange(zone);
-                  setMobileMenuOpen(false);
-                }}
-                aria-pressed={ageZone === zone}
-                className={`flex-1 rounded-md px-2 py-2 text-[11px] font-semibold transition-colors ${
-                  ageZone === zone
-                    ? "bg-emerald-600 text-white"
-                    : "text-slate-400 hover:text-white"
-                }`}
-              >
-                {zone === "JUNIOR" ? "Junior" : zone === "TEEN" ? "Teen" : zone === "YOUTH" ? "Youth" : "Senior"}
-              </button>
-            ))}
-          </div>
+          {isAuthenticated ? (
+            <div className="flex w-full items-center justify-between gap-1 rounded-lg bg-slate-900/90 border border-slate-800 px-3 py-2 sm:hidden">
+              <span className="text-xs text-slate-400 font-mono">Calibrated Tier:</span>
+              <span className="text-xs font-bold font-mono text-emerald-300 flex items-center gap-1">
+                <Shield className="w-3 h-3 text-emerald-400" />
+                {getZoneLabel(ageZone)} (Locked)
+              </span>
+            </div>
+          ) : (
+            <div className="flex w-full flex-wrap items-center gap-1 rounded-lg bg-slate-900/90 p-1 sm:hidden">
+              {(["JUNIOR", "TEEN", "YOUTH", "SENIOR"] as const).map((zone) => (
+                <button
+                  key={zone}
+                  type="button"
+                  onClick={() => {
+                    sounds.playClick();
+                    onZoneChange(zone);
+                    setMobileMenuOpen(false);
+                  }}
+                  aria-pressed={ageZone === zone}
+                  className={`flex-1 rounded-md px-2 py-2 text-[11px] font-semibold transition-colors ${
+                    ageZone === zone
+                      ? "bg-emerald-600 text-white"
+                      : "text-slate-400 hover:text-white"
+                  }`}
+                >
+                  {zone === "JUNIOR" ? "Junior" : zone === "TEEN" ? "Teen" : zone === "YOUTH" ? "Youth" : "Senior"}
+                </button>
+              ))}
+            </div>
+          )}
 
           {/* Daily Streak */}
           <div className="hidden 2xl:flex items-center gap-1.5 rounded-lg bg-slate-900 border border-slate-800 px-2.5 py-1.5 text-xs font-semibold text-amber-400 font-mono">

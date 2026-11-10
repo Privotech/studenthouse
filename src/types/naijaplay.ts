@@ -66,6 +66,9 @@ export interface DailyMission {
   completed: boolean;
   claimed: boolean;
   iconName: string;
+  targetZone?: AgeZone;
+  gameType?: "drills" | "memory" | "cipher" | "math_blitz" | "debugger" | "course" | "studio" | "tournament" | "club";
+  targetRoute?: NavTab;
 }
 
 export interface EducationalGame {

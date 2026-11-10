@@ -32,6 +32,7 @@ interface PlayerProfileViewProps {
   onUpdateAge: (age: number) => void;
   onSetFeaturedBadge?: (badgeId: string) => void;
   onOpenAuth?: (tab?: "signin" | "register") => void;
+  isAuthenticated?: boolean;
 }
 
 export const PlayerProfileView: React.FC<PlayerProfileViewProps> = ({
@@ -41,6 +42,7 @@ export const PlayerProfileView: React.FC<PlayerProfileViewProps> = ({
   onUpdateAge,
   onSetFeaturedBadge,
   onOpenAuth,
+  isAuthenticated = false,
 }) => {
   const [editingName, setEditingName] = useState(false);
   const [newName, setNewName] = useState(player.displayName);
@@ -126,18 +128,27 @@ export const PlayerProfileView: React.FC<PlayerProfileViewProps> = ({
               {player.school} · {player.state}
             </p>
 
-            {/* Age Adjustment Slider (Ages 6 to 30) */}
+            {/* Age Display / Adjustment */}
             <div className="pt-2 max-w-sm flex items-center gap-3">
               <span className="text-xs font-mono text-slate-400 shrink-0">Age: {player.age}</span>
-              <input
-                type="range"
-                min="6"
-                max="30"
-                value={player.age}
-                onChange={(e) => onUpdateAge(Number(e.target.value))}
-                className="w-full accent-emerald-500 cursor-pointer"
-              />
-              <span className="text-[11px] font-mono text-slate-500">Max 30</span>
+              {isAuthenticated ? (
+                <div className="flex items-center gap-2 rounded-lg bg-slate-950 border border-slate-800 px-3 py-1.5 text-xs font-mono text-slate-300">
+                  <Shield className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Verified Age & Tier Locked</span>
+                </div>
+              ) : (
+                <>
+                  <input
+                    type="range"
+                    min="6"
+                    max="30"
+                    value={player.age}
+                    onChange={(e) => onUpdateAge(Number(e.target.value))}
+                    className="w-full accent-emerald-500 cursor-pointer"
+                  />
+                  <span className="text-[11px] font-mono text-slate-500">Max 30</span>
+                </>
+              )}
             </div>
 
             {/* Level XP Bar */}
