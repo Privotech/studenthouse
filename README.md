@@ -72,10 +72,7 @@ naijaplay/
    npm install
    ```
 2. **Configure environment variables:**
-   Copy `.env.example` to `.env` and supply the credentials needed for the services you use. Prisma loads `DATABASE_URL` and `DIRECT_URL` from `.env` when validating the schema:
-   ```bash
-   cp .env.example .env
-   ```
+   Put local credentials and secrets only in the root `.env` file. Next.js and Prisma load it automatically. Do not copy real values into `.env.example`, source files, or chat messages. The `.env` file is ignored by Git.
 3. **Validate the Prisma relational schema:**
    ```bash
    npm run db:validate
@@ -116,3 +113,5 @@ naijaplay/
 | `NEXT_PUBLIC_DEFAULT_COUNTRY` | Public | Initial market ISO country code (`NG`) |
 
 > **Security Rule:** Server secrets (`DATABASE_URL`, `AUTH_SECRET`, `RESEND_API_KEY`, `CLOUDINARY_API_SECRET`) must **never** be prefixed with `NEXT_PUBLIC_`.
+
+> **Local secrets:** Keep real credentials in the root `.env` only. `.env.example` is an optional, safe template and must contain placeholders only; it is not loaded as the application's secret file.

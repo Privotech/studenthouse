@@ -49,10 +49,7 @@ export interface DbAuditLog {
   created_at: string;
 }
 
-const connectionString =
-  process.env.NEON_DATABASE_URL ||
-  process.env.DATABASE_URL ||
-  "";
+const connectionString = process.env.DATABASE_URL || "";
 
 const isNeonConfigured =
   Boolean(connectionString) &&
