@@ -96,7 +96,7 @@ const THREAT_MODEL_RECORDS: ReadonlyArray<ThreatRecord> = [
     stride: "Info Disclosure / EoP",
     severity: "High",
     control:
-      "Magic-byte MIME allowlist (PNG/JPEG/WebP only; SVG banned), automatic EXIF GPS stripping, 2MB ceiling, isolated storage bucket.",
+      "PNG magic-byte validation, 2MB ceiling, canvas-generated images without source EXIF, and authenticated Cloudinary delivery.",
     verificationTarget: "docs/security/SECURITY_REQUIREMENTS.md",
   },
   {

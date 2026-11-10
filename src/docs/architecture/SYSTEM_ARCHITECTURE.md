@@ -42,7 +42,7 @@ NaijaPlay is structured as a **Modular Monolith** rather than premature microser
 +-----------------------------------------------------------------------------------+
 |                         DATA & INFRASTRUCTURE LAYER                               |
 |  [PostgreSQL (Single Source of Truth via Prisma)]   [Redis (Rate Limits/Cache)]   |
-|  [S3/Cloudinary (Moderated Media Storage)]          [Resend (Guardian Emails)]    |
+|  [Cloudinary (Authenticated Media Storage)]         [Resend (Guardian Emails)]   |
 +-----------------------------------------------------------------------------------+
 ```
 

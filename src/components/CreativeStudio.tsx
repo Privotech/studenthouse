@@ -101,6 +101,8 @@ export const CreativeStudio: React.FC<CreativeStudioProps> = ({
   // Publish / Export modal
   const [exportTitle, setExportTitle] = useState<string>("Studio Composition 01");
   const [showPublishSuccess, setShowPublishSuccess] = useState<boolean>(false);
+  const [publishError, setPublishError] = useState<string | null>(null);
+  const [isPublishing, setIsPublishing] = useState(false);
   const [activeTab, setActiveTab] = useState<"canvas" | "gallery">("canvas");
 
   // Push current canvas state to history stack
@@ -229,30 +231,81 @@ export const CreativeStudio: React.FC<CreativeStudioProps> = ({
   };
 
   // Publish to community gallery
-  const handlePublish = () => {
+  const handlePublish = async () => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
-    sounds.playTrophy();
-    const dataUrl = canvas.toDataURL("image/png");
+    if (!canvas || isPublishing) return;
 
-    const newSubmission: CreativeSubmissionItem = {
-      id: `cs-${Date.now()}`,
-      title: exportTitle || "Untitled Composition",
-      author: "Chidi Okonkwo",
-      authorZone: ageZone,
-      category: "Design Composition",
-      content: dataUrl,
-      type: "image",
-      likes: 1,
-      moderationStatus: "Approved",
-      tags: ["DigitalArt", "Studio", "Composition"],
-      createdAt: new Date().toISOString().split("T")[0]!,
-    };
+    setIsPublishing(true);
+    setPublishError(null);
+    try {
+      const image = await new Promise<Blob>((resolve, reject) => {
+        canvas.toBlob((blob) => {
+          if (blob) resolve(blob);
+          else reject(new Error("Could not create an image from the canvas."));
+        }, "image/png");
+      });
+      const formData = new FormData();
+      formData.append("image", image, "composition.png");
+      formData.append("title", exportTitle || "Untitled Composition");
 
-    onSubmitWork(newSubmission);
-    onAwardXP(100, "Published Studio Design");
-    setShowPublishSuccess(true);
-    setTimeout(() => setShowPublishSuccess(false), 3000);
+      const response = await fetch("/api/media/creative", {
+        method: "POST",
+        body: formData,
+      });
+      const result: unknown = await response.json();
+      if (!response.ok) {
+        const message =
+          typeof result === "object" &&
+          result !== null &&
+          "error" in result &&
+          typeof result.error === "string"
+            ? result.error
+            : "Could not publish your composition.";
+        throw new Error(message);
+      }
+
+      if (
+        typeof result !== "object" ||
+        result === null ||
+        !("imageUrl" in result) ||
+        typeof result.imageUrl !== "string" ||
+        !("author" in result) ||
+        typeof result.author !== "string" ||
+        !("authorZone" in result) ||
+        typeof result.authorZone !== "string" ||
+        !("id" in result) ||
+        typeof result.id !== "string"
+      ) {
+        throw new Error("The server returned an invalid publish response.");
+      }
+
+      const newSubmission: CreativeSubmissionItem = {
+        id: result.id,
+        title: exportTitle || "Untitled Composition",
+        author: result.author,
+        authorZone: result.authorZone as AgeZone,
+        category: "Design Composition",
+        content: result.imageUrl,
+        type: "image",
+        likes: 1,
+        moderationStatus: "Pending",
+        tags: ["DigitalArt", "Studio", "Composition"],
+        createdAt: new Date().toISOString().split("T")[0]!,
+      };
+
+      sounds.playTrophy();
+      onSubmitWork(newSubmission);
+      onAwardXP(100, "Published Studio Design");
+      setShowPublishSuccess(true);
+      setTimeout(() => setShowPublishSuccess(false), 3000);
+    } catch (error) {
+      console.error("Creative Studio publish failed:", error);
+      setPublishError(
+        error instanceof Error ? error.message : "Could not publish your composition."
+      );
+    } finally {
+      setIsPublishing(false);
+    }
   };
 
   // Canvas Mouse Coordinates helper
@@ -572,10 +625,11 @@ export const CreativeStudio: React.FC<CreativeStudioProps> = ({
 
               <button
                 onClick={handlePublish}
-                className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 font-bold text-white transition-colors shadow-lg shadow-emerald-950"
+                disabled={isPublishing}
+                className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:cursor-wait disabled:opacity-60 font-bold text-white transition-colors shadow-lg shadow-emerald-950"
               >
                 <Sparkles className="w-3.5 h-3.5" />
-                <span>Publish (+100 XP)</span>
+                <span>{isPublishing ? "Uploading..." : "Publish (+100 XP)"}</span>
               </button>
             </div>
           </div>
@@ -761,7 +815,12 @@ export const CreativeStudio: React.FC<CreativeStudioProps> = ({
               {showPublishSuccess && (
                 <div className="mt-2 w-full p-2.5 rounded-xl bg-emerald-950/90 border border-emerald-700 text-xs font-semibold text-emerald-300 flex items-center gap-2">
                   <Check className="w-4 h-4 text-emerald-400" />
-                  <span>Composition successfully published to the Scholarly Showcase! (+100 XP)</span>
+                  <span>Composition uploaded and submitted for review. (+100 XP)</span>
+                </div>
+              )}
+              {publishError && (
+                <div role="alert" className="mt-2 w-full rounded-xl border border-rose-800 bg-rose-950/70 p-2.5 text-xs font-semibold text-rose-300">
+                  {publishError}
                 </div>
               )}
             </div>
@@ -943,7 +1002,9 @@ export const CreativeStudio: React.FC<CreativeStudioProps> = ({
                   <h4 className="font-display text-base font-bold text-white">
                     {item.title}
                   </h4>
-                  {item.type === "image" && item.content.startsWith("data:image") ? (
+                  {item.type === "image" &&
+                  (item.content.startsWith("data:image") ||
+                    item.content.startsWith("https://res.cloudinary.com/")) ? (
                     <div className="rounded-xl border border-slate-800 overflow-hidden bg-slate-950 max-h-48 flex items-center justify-center">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img

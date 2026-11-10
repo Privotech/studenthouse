@@ -115,8 +115,10 @@ naijaplay/
 | `AUTH_SECRET` | Server-only | 32-byte cryptographic secret for Auth.js session signing |
 | `AUTH_URL` | Server-only | Canonical origin URL for authentication callbacks |
 | `REDIS_URL` | Server-only | Redis connection string for rate limiting and leaderboard caching |
-| `STORAGE_BUCKET_URL` | Server-only | S3-compatible bucket endpoint for moderated Creative Studio uploads |
+| `CLOUDINARY_CLOUD_NAME` | Server-only | Cloudinary cloud name for Creative Studio image uploads |
+| `CLOUDINARY_API_KEY` | Server-only | Cloudinary API key |
+| `CLOUDINARY_API_SECRET` | Server-only | Cloudinary API secret; never expose it to the browser |
 | `RESEND_API_KEY` | Server-only | Transactional email API key for Guardian Consent verification |
 | `NEXT_PUBLIC_DEFAULT_COUNTRY` | Public | Initial market ISO country code (`NG`) |
 
-> **Security Rule:** Server secrets (`DATABASE_URL`, `AUTH_SECRET`, `RESEND_API_KEY`, `STORAGE_SECRET_ACCESS_KEY`) must **never** be prefixed with `NEXT_PUBLIC_`.
+> **Security Rule:** Server secrets (`DATABASE_URL`, `AUTH_SECRET`, `RESEND_API_KEY`, `CLOUDINARY_API_SECRET`) must **never** be prefixed with `NEXT_PUBLIC_`.

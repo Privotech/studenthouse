@@ -21,7 +21,7 @@ NaijaPlay serves children and young adults aged 6–25. Protecting minors (`JUNI
    - `TEEN` profiles default to `SCHOOL_AND_CLUB_ONLY`.
    - Display names are validated to block phone numbers, email addresses, and spaces (`^[a-zA-Z0-9_]{3,20}$`).
    - No precise geolocation is collected or displayed.
-5. **Pre-Publication Media Moderation:** All Creative Studio uploads (`CreativeSubmission`) default to `ModerationStatus.PENDING_REVIEW` and are stored in private object storage buckets until explicitly approved by a `MODERATOR`.
+5. **Pre-Publication Media Moderation:** All Creative Studio uploads (`CreativeSubmission`) default to `ModerationStatus.PENDING_REVIEW` and are stored as authenticated Cloudinary assets until explicitly approved by a `MODERATOR`.
 
 ---
 
