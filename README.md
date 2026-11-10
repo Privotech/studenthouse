@@ -9,7 +9,7 @@
 
 ## 1. Overview & Architectural Philosophy
 
-NaijaPlay is an activity-first African youth entertainment and learning ecosystem built with Next.js (App Router), TypeScript (strict mode), PostgreSQL, Prisma ORM, and Zod. The web app lives under `src/`; domain package-style modules are also kept there to separate validation, permissions, and game logic from presentation. The repository includes Turborepo configuration, but does not currently have a root pnpm workspace file.
+NaijaPlay is an activity-first African youth entertainment and learning ecosystem built with Next.js (App Router), TypeScript, PostgreSQL, Prisma, and Zod. The web app and its supporting domain modules live under `src/`; external dependencies and scripts are managed from the repository root.
 
 ### Core Engineering Principles
 1. **Server-Authoritative Progression & Anti-Cheat:** Clients never dictate XP awards, level progression, or leaderboard rankings. Game sessions are verified against server-side plausibility bounds (`@naijaplay/game-engine`), and XP is recorded in an immutable, append-only `XPTransaction` ledger with idempotency keys.
@@ -30,7 +30,6 @@ naijaplay/
 │   │   ├── api/v1/               # Health and architecture verification endpoints
 │   │   ├── layout.tsx            # Root layout and metadata
 │   │   └── page.tsx              # Main NaijaPlay application
-│   ├── apps/web/                 # Web workspace descriptor and README
 │   ├── components/               # Navbar, games, learning, studio, profile, and other UI
 │   ├── data/                     # Mock and seed presentation data
 │   ├── docs/                     # Product, architecture, database, API, and security docs
@@ -51,11 +50,10 @@ naijaplay/
 ├── package.json
 ├── tsconfig.json
 ├── next.config.ts
-├── turbo.json
 └── vitest.config.ts
 ```
 
-`src/app/` is the active Next.js app directory. The old root-level layout shown in earlier documentation is not used.
+`src/app/` is the active Next.js app directory. The old root-level layout shown in earlier documentation is not used. Directories under `src/packages/` contain imported application source code; they are not separately installed npm workspaces.
 
 ---
 

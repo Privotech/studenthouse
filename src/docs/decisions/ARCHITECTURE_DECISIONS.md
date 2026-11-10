@@ -10,6 +10,7 @@
 - **Context:** NaijaPlay comprises eight functional modules (Game Arena, Competition Arena, Learn & Grow, Creative Studio, Clubs, Player Profiles, Parent & School Portal, Admin & Moderation) and plans a future Android client and real-time multiplayer server.
 - **Decision:** Build Phase 1–11 as a **Modular Monolith** inside a single Next.js application backed by isolated workspace packages (`@naijaplay/shared`, `@naijaplay/validation`, `@naijaplay/permissions`, `@naijaplay/game-engine`, `@naijaplay/database`, `@naijaplay/ui`).
 - **Rationale:** Microservices introduce distributed transaction complexity, network serialization overhead, and DevOps burden that slow down solo and small-team velocity. Isolating domain logic into workspace packages gives us strict compile-time boundaries and code reuse for the future Android and Socket.IO apps while maintaining ACID PostgreSQL transactions across modules.
+- **Implementation note:** This workspace packaging was not completed in the current repository. The app is managed from the root `package.json`; code under `src/packages/` is imported source organized by responsibility and is not an installed npm workspace.
 
 ---
 

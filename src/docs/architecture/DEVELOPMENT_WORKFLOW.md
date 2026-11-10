@@ -11,7 +11,7 @@ NaijaPlay is developed in twelve explicit, review-gated phases. Code never advan
 - `feat/phase-XX-<module>`: Feature branches scoped to the active phase.
 - **Pre-Merge Quality Gate (`.github/workflows/ci.yml`):**
   1. `npm run db:validate` — Validates `packages/database/prisma/schema.prisma`.
-  2. `npm run typecheck` — Runs `tsc --noEmit` in strict mode across all workspace packages and Next.js routes.
+  2. `npm run typecheck` — Runs `tsc --noEmit` in strict mode across the app, its domain source modules, and Next.js routes.
   3. `npm run lint` — Runs ESLint across the repository.
   4. `npm run test` — Executes the Vitest automated test suite.
   5. `npm run build` — Verifies clean production compilation.

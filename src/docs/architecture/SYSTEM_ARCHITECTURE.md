@@ -1,14 +1,15 @@
 # NaijaPlay — System Architecture Document
 
 **Document Version:** 1.0 (Phase 1 Foundation)  
-**Architectural Style:** Modular Monolith in a `pnpm` + Turborepo Monorepo  
+**Current Implementation:** Single Next.js application managed from the repository root with npm
+**Architecture Direction:** Modular monolith; domain modules currently live as TypeScript source under `src/packages/`, not separate npm workspaces
 **Primary Runtime:** Next.js 15+ (App Router, TypeScript Strict Mode) + PostgreSQL (Prisma ORM)
 
 ---
 
 ## 1. High-Level Architectural Topology
 
-NaijaPlay is structured as a **Modular Monolith** rather than premature microservices. All core business domains live in strongly typed, isolated workspace packages with explicit public interfaces, deployed initially within a single Next.js application while keeping stateful real-time multiplayer decoupled for future deployment.
+NaijaPlay is structured as a **Modular Monolith** rather than premature microservices. The current repository is one Next.js application. Domain modules under `src/packages/` are TypeScript source folders resolved through path aliases, not separately installed workspace packages. Stateful real-time multiplayer remains a possible future deployment boundary.
 
 ```text
 +-----------------------------------------------------------------------------------+
