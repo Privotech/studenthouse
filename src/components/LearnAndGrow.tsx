@@ -89,15 +89,18 @@ export const LearnAndGrow: React.FC<LearnAndGrowProps> = ({
     "International Relations & Geopolitics",
   ];
 
+  const [zoneFilter, setZoneFilter] = useState<"MY_ZONE" | "ALL">("MY_ZONE");
+
   const filteredCourses = COMPREHENSIVE_COURSES.filter((course) => {
     const matchesCategory = selectedCategory === "All" || course.category === selectedCategory;
     const matchesLevel = selectedLevel === "All" || course.level === selectedLevel;
+    const matchesZone = zoneFilter === "ALL" || course.targetZone === ageZone;
     const matchesSearch =
       searchQuery.trim() === "" ||
       course.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       course.overview.toLowerCase().includes(searchQuery.toLowerCase()) ||
       course.category.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesCategory && matchesLevel && matchesSearch;
+    return matchesCategory && matchesLevel && matchesZone && matchesSearch;
   });
 
   const getCategoryIcon = (category: string) => {
@@ -275,6 +278,34 @@ export const LearnAndGrow: React.FC<LearnAndGrowProps> = ({
             </div>
 
             <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0 text-xs font-mono">
+              <button
+                onClick={() => {
+                  sounds.playClick();
+                  setZoneFilter("MY_ZONE");
+                }}
+                className={`px-3 py-2 rounded-xl whitespace-nowrap transition-colors flex items-center gap-1.5 ${
+                  zoneFilter === "MY_ZONE"
+                    ? "bg-emerald-950/80 text-emerald-300 font-bold border border-emerald-500"
+                    : "bg-slate-950 text-slate-400 hover:text-slate-200 border border-slate-800"
+                }`}
+              >
+                <Shield className="w-3.5 h-3.5 text-emerald-400" />
+                <span>My {ageZone} Tier ({filteredCourses.length})</span>
+              </button>
+              <button
+                onClick={() => {
+                  sounds.playClick();
+                  setZoneFilter("ALL");
+                }}
+                className={`px-3 py-2 rounded-xl whitespace-nowrap transition-colors ${
+                  zoneFilter === "ALL"
+                    ? "bg-slate-800 text-emerald-400 font-bold border border-emerald-500/50"
+                    : "bg-slate-950 text-slate-400 hover:text-slate-200 border border-slate-800"
+                }`}
+              >
+                All Tiers
+              </button>
+              <div className="h-5 w-px bg-slate-800 mx-1 hidden sm:block" />
               <span className="text-slate-500 shrink-0 hidden sm:inline">Level:</span>
               {["All", "Foundational", "Intermediate", "Advanced"].map((lvl) => (
                 <button

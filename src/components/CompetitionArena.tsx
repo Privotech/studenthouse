@@ -29,7 +29,7 @@ export const CompetitionArena: React.FC<CompetitionArenaProps> = ({
   onAwardXP,
 }) => {
   const [filterType, setFilterType] = useState<"All" | "Individual" | "School vs School" | "State vs State">("All");
-  const [joinedTournaments, setJoinedTournaments] = useState<string[]>(["tourn-1"]);
+  const [joinedTournaments, setJoinedTournaments] = useState<string[]>([]);
   const [activeTab, setActiveTab] = useState<"tournaments" | "leaderboard" | "schools">("tournaments");
 
   const filteredTournaments = TOURNAMENTS.filter((t) => {

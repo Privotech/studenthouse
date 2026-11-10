@@ -15,7 +15,7 @@ import { AdminModerationModal } from "@/components/AdminModerationModal";
 import { RoadmapModal } from "@/components/RoadmapModal";
 import { AuthModal } from "@/components/AuthModal";
 import { AgeZone, CreativeSubmissionItem, NavTab, PlayerState } from "@/types/naijaplay";
-import { CREATIVE_SUBMISSIONS, INITIAL_MISSIONS, INITIAL_PLAYER } from "@/data/mockData";
+import { CREATIVE_SUBMISSIONS, INITIAL_MISSIONS, INITIAL_PLAYER, getMissionsForZone } from "@/data/mockData";
 import { sounds } from "@/lib/audio";
 import { Sparkles, ShieldAlert, Map } from "lucide-react";
 
@@ -42,12 +42,13 @@ export default function NaijaPlayApp() {
         .then((data) => {
           if (data.authenticated && data.user) {
             setIsAuthenticated(true);
+            const userZone: AgeZone = data.user.age_zone || "TEEN";
             setPlayer((prev) => ({
               ...prev,
               displayName: data.user.display_name,
               avatarInitials: data.user.avatar_initials,
               avatarCrest: data.user.avatar_crest,
-              ageZone: data.user.age_zone,
+              ageZone: userZone,
               age: data.user.age,
               level: data.user.level,
               xp: data.user.xp,
@@ -55,6 +56,7 @@ export default function NaijaPlayApp() {
               school: data.user.school,
               state: data.user.state,
             }));
+            setMissions(getMissionsForZone(userZone));
           }
         })
         .catch(() => {});
@@ -63,12 +65,16 @@ export default function NaijaPlayApp() {
 
   const handleAuthSuccess = (userData: Partial<PlayerState> & { email: string; username: string }) => {
     setIsAuthenticated(true);
+    const assignedZone: AgeZone = userData.ageZone || "TEEN";
     setPlayer((prev) => ({
       ...prev,
       ...userData,
+      ageZone: assignedZone,
     }));
+    // Assign custom calibrated game tasks matching the signed-in user's age bracket
+    setMissions(getMissionsForZone(assignedZone));
     sounds.playLevelUp();
-    showToast(`Welcome ${userData.displayName || userData.username}! Profile authenticated with NeonDB.`);
+    showToast(`Welcome ${userData.displayName || userData.username}! Calibrated game tasks loaded for ${assignedZone} zone.`);
   };
 
   const handleSignOut = async () => {
@@ -90,7 +96,8 @@ export default function NaijaPlayApp() {
       avatarInitials: "GS",
       school: "Visitor Portal",
     });
-    showToast("Signed out. Operating in guest session.");
+    setMissions(getMissionsForZone("TEEN"));
+    showToast("Signed out. Operating in guest session with fresh missions.");
   };
 
   // Floating notification toast
@@ -178,7 +185,8 @@ export default function NaijaPlayApp() {
       age: mappedAge,
       maxScreenTimeMinutes: zone === "JUNIOR" ? 60 : zone === "TEEN" ? 120 : zone === "YOUTH" ? 180 : 240,
     }));
-    showToast(`Academic Tier Configured: ${zone} (Age ${mappedAge})`);
+    setMissions(getMissionsForZone(zone));
+    showToast(`Academic Tier Configured: ${zone} (Age ${mappedAge}) - Tasks Recalibrated`);
   };
 
   // Update player Age directly (6 to 30)
@@ -194,7 +202,8 @@ export default function NaijaPlayApp() {
       age: newAge,
       ageZone: zone,
     }));
-    showToast(`Age calibrated to ${newAge} (${zone} Tier)`);
+    setMissions(getMissionsForZone(zone));
+    showToast(`Age calibrated to ${newAge} (${zone} Tier) - Tasks Recalibrated`);
   };
 
   // Avatar crest update
@@ -370,6 +379,7 @@ export default function NaijaPlayApp() {
               setAuthDefaultTab(tab || "signin");
               setIsAuthOpen(true);
             }}
+            isAuthenticated={isAuthenticated}
           />
         )}
 
