@@ -10,6 +10,23 @@ export type NavTab =
   | "profile"
   | "portals";
 
+export type BadgeTier = "BRONZE" | "SILVER" | "GOLD" | "OBSIDIAN";
+
+export type BadgeCategory =
+  | "LEARNING"
+  | "COMPETITION"
+  | "DISCIPLINE"
+  | "CREATIVE_COMMUNITY";
+
+export interface PlayerAchievementStats {
+  tournamentsEnteredCount: number;
+  olympiadQualifiersPassed: number;
+  drillsCompleted: number;
+  societiesJoined: number;
+  problemsSolved: number;
+  studioPublished: number;
+}
+
 export interface PlayerState {
   displayName: string;
   avatarInitials: string;
@@ -23,6 +40,8 @@ export interface PlayerState {
   streakDays: number;
   coins: number;
   badges: string[];
+  featuredBadgeId?: string;
+  achievementStats?: PlayerAchievementStats;
   school: string;
   state: string;
   certificates: Array<{
