@@ -21,6 +21,8 @@ import {
 } from "lucide-react";
 import { PlayerState } from "@/types/naijaplay";
 import { AVATAR_CRESTS } from "@/data/mockData";
+import { BADGE_DEFINITIONS, TIER_CONFIG } from "@/data/badges";
+import { BadgeCabinet } from "@/components/BadgeCabinet";
 import { sounds } from "@/lib/audio";
 
 interface PlayerProfileViewProps {
@@ -28,29 +30,24 @@ interface PlayerProfileViewProps {
   onUpdateAvatarCrest: (crest: string) => void;
   onUpdateName: (name: string) => void;
   onUpdateAge: (age: number) => void;
+  onSetFeaturedBadge?: (badgeId: string) => void;
   onOpenAuth?: (tab?: "signin" | "register") => void;
 }
-
-const ACADEMIC_HONOURS = [
-  { id: "h-1", title: "Dean's Honour Roll", desc: "Maintained a 90%+ average across all examination modules", icon: GraduationCap, unlocked: true },
-  { id: "h-2", title: "Algorithmic Master", desc: "Completed all Data Structures & Python problem sets", icon: Terminal, unlocked: true },
-  { id: "h-3", title: "Calculus Distinction", desc: "Scored 100% on the Quantitative Reasoning Examination", icon: Sigma, unlocked: true },
-  { id: "h-4", title: "Civic Governance Fellow", desc: "Completed Constitutional Law & Human Rights analysis", icon: Shield, unlocked: true },
-  { id: "h-5", title: "West African Historian", desc: "Mastered Pre-Colonial Civilizations & Sahelian Trade", icon: Globe, unlocked: true },
-  { id: "h-6", title: "12-Day Academic Streak", desc: "Maintained consecutive daily academic study logins", icon: Flame, unlocked: true },
-  { id: "h-7", title: "Interscholastic Laureate", desc: "Represented school in the National STEM Olympiad", icon: Award, unlocked: false },
-  { id: "h-8", title: "Peer-Review Laureate", desc: "Authored 3 approved engineering designs in Creative Studio", icon: BookOpen, unlocked: false },
-];
 
 export const PlayerProfileView: React.FC<PlayerProfileViewProps> = ({
   player,
   onUpdateAvatarCrest,
   onUpdateName,
   onUpdateAge,
+  onSetFeaturedBadge,
   onOpenAuth,
 }) => {
   const [editingName, setEditingName] = useState(false);
   const [newName, setNewName] = useState(player.displayName);
+
+  const featuredBadge = player.featuredBadgeId
+    ? BADGE_DEFINITIONS.find((b) => b.id === player.featuredBadgeId)
+    : null;
 
   const handleNameSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -116,6 +113,13 @@ export const PlayerProfileView: React.FC<PlayerProfileViewProps> = ({
               <span className="rounded-md bg-slate-800 border border-slate-700 px-2.5 py-0.5 text-xs font-mono text-emerald-300">
                 {player.ageZone} Tier (Age {player.age})
               </span>
+
+              {featuredBadge && (
+                <span className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-0.5 text-xs font-mono font-bold border ${TIER_CONFIG[featuredBadge.tier].accentBg}`}>
+                  <Award className="w-3.5 h-3.5" />
+                  <span>Featured: {featuredBadge.title}</span>
+                </span>
+              )}
             </div>
 
             <p className="text-xs text-slate-300 font-mono">
@@ -324,59 +328,11 @@ export const PlayerProfileView: React.FC<PlayerProfileViewProps> = ({
         </div>
       </div>
 
-      {/* Academic Honours Cabinet */}
-      <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-6 space-y-4">
-        <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-          <div>
-            <h3 className="font-display text-lg font-bold text-white">
-              Academic Honours Cabinet
-            </h3>
-            <p className="text-xs text-slate-400">
-              Recognitions awarded for verified academic problem solving and examination mastery.
-            </p>
-          </div>
-          <span className="text-xs font-mono font-bold text-emerald-400">
-            {ACADEMIC_HONOURS.filter((h) => h.unlocked).length} / {ACADEMIC_HONOURS.length} Unlocked
-          </span>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {ACADEMIC_HONOURS.map((honour) => {
-            const Icon = honour.icon;
-            return (
-              <div
-                key={honour.id}
-                className={`rounded-2xl border p-4 space-y-2 transition-all ${
-                  honour.unlocked
-                    ? "border-emerald-800/60 bg-slate-950"
-                    : "border-slate-800/40 bg-slate-950/40 opacity-40"
-                }`}
-              >
-                <div className="flex items-center justify-between">
-                  <span className="p-2 rounded-xl bg-slate-900 border border-slate-800 text-emerald-400">
-                    <Icon className="w-4 h-4" />
-                  </span>
-                  {honour.unlocked ? (
-                    <span className="text-[10px] font-mono font-bold text-emerald-400 bg-emerald-950 border border-emerald-800 px-1.5 py-0.5 rounded">
-                      Conferred
-                    </span>
-                  ) : (
-                    <span className="text-[10px] font-mono text-slate-500">
-                      In Progress
-                    </span>
-                  )}
-                </div>
-                <h4 className="font-display text-sm font-bold text-white">
-                  {honour.title}
-                </h4>
-                <p className="text-[11px] text-slate-300 leading-snug">
-                  {honour.desc}
-                </p>
-              </div>
-            );
-          })}
-        </div>
-      </div>
+      {/* Dynamic Scholarly Badge & Achievement Cabinet */}
+      <BadgeCabinet
+        player={player}
+        onSetFeaturedBadge={onSetFeaturedBadge}
+      />
     </div>
   );
 };

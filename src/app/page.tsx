@@ -252,6 +252,19 @@ export default function NaijaPlayApp() {
     setSubmissions((prev) => [item, ...prev]);
   };
 
+  // Featured Badge pinned on profile
+  const handleSetFeaturedBadge = (badgeId: string) => {
+    setPlayer((prev) => ({
+      ...prev,
+      featuredBadgeId: badgeId || undefined,
+    }));
+    if (badgeId) {
+      showToast("Featured badge pinned to scholar profile.");
+    } else {
+      showToast("Featured badge unpinned.");
+    }
+  };
+
   // Screen time limit update
   const handleUpdateScreenTime = (minutes: number) => {
     setPlayer((prev) => ({ ...prev, maxScreenTimeMinutes: minutes }));
@@ -352,6 +365,7 @@ export default function NaijaPlayApp() {
             onUpdateAvatarCrest={handleUpdateAvatarCrest}
             onUpdateName={handleUpdateName}
             onUpdateAge={handleUpdateAge}
+            onSetFeaturedBadge={handleSetFeaturedBadge}
             onOpenAuth={(tab) => {
               setAuthDefaultTab(tab || "signin");
               setIsAuthOpen(true);

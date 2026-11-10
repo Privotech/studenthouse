@@ -27,6 +27,15 @@ export const INITIAL_PLAYER: PlayerState = {
     "Civic Governance Fellow",
     "West African Historian",
   ],
+  featuredBadgeId: "deans-honour-roll",
+  achievementStats: {
+    tournamentsEnteredCount: 2,
+    olympiadQualifiersPassed: 1,
+    drillsCompleted: 6,
+    societiesJoined: 2,
+    problemsSolved: 4,
+    studioPublished: 2,
+  },
   school: "King's College Lagos",
   state: "Lagos State",
   certificates: [

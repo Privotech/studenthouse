@@ -21,7 +21,13 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const token = request.cookies.get("np_session")?.value;
+  const authHeader = request.headers.get("authorization");
+  const bearerToken = authHeader?.startsWith("Bearer ")
+    ? authHeader.slice(7).trim()
+    : null;
+  const cookieToken = request.cookies.get("np_session")?.value;
+  const token = bearerToken || cookieToken;
+
   if (!token) {
     return NextResponse.json({ error: "Sign in before publishing artwork." }, { status: 401 });
   }
