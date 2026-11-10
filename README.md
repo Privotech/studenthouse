@@ -9,7 +9,7 @@
 
 ## 1. Overview & Architectural Philosophy
 
-NaijaPlay is an activity-first African youth entertainment and learning ecosystem. It is engineered as a **Modular Monolith** built on Next.js (App Router), TypeScript (strict mode), PostgreSQL, Prisma ORM, and Zod, organized in a `pnpm` + Turborepo workspace so domain logic, validation contracts, permission policies, and the server-authoritative game/XP engine are cleanly separated from presentation and reusable by the future Android client.
+NaijaPlay is an activity-first African youth entertainment and learning ecosystem built with Next.js (App Router), TypeScript (strict mode), PostgreSQL, Prisma ORM, and Zod. The web app lives under `src/`; domain package-style modules are also kept there to separate validation, permissions, and game logic from presentation. The repository includes Turborepo configuration, but does not currently have a root pnpm workspace file.
 
 ### Core Engineering Principles
 1. **Server-Authoritative Progression & Anti-Cheat:** Clients never dictate XP awards, level progression, or leaderboard rankings. Game sessions are verified against server-side plausibility bounds (`@naijaplay/game-engine`), and XP is recorded in an immutable, append-only `XPTransaction` ledger with idempotency keys.
@@ -23,45 +23,39 @@ NaijaPlay is an activity-first African youth entertainment and learning ecosyste
 
 ```text
 naijaplay/
-├── app/                          # Next.js App Router (Web PWA & Phase 1 Architecture Workbench)
-│   ├── api/v1/                   # Versioned REST API routes with Zod validation & error envelopes
-│   ├── layout.tsx                # Root layout with PWA metadata & typography
-│   ├── manifest.ts               # Native Next.js Web App Manifest
-│   └── page.tsx                  # Phase 1 Architecture & Verification Console
-├── apps/
-│   └── web/                      # Monorepo web workspace descriptor
-├── packages/
-│   ├── database/                 # Prisma schema (26 models across 9 domains) & entity metadata
-│   │   └── prisma/schema.prisma
-│   ├── game-engine/              # Server-authoritative score verifier & immutable XP ledger
-│   ├── permissions/              # RBAC & Age-Aware ABAC policy engine + NDPA privacy defaults
-│   ├── shared/                   # Domain enums, API response envelopes & typed AppError classes
-│   ├── ui/                       # Age-zone design tokens & shared UI specifications
-│   └── validation/               # Zod schemas & authoritative age-zone resolution
-├── docs/
-│   ├── product/
-│   │   └── PRODUCT_REQUIREMENTS.md
-│   ├── architecture/
-│   │   ├── SYSTEM_ARCHITECTURE.md
-│   │   ├── PWA_STRATEGY.md
-│   │   └── DEVELOPMENT_WORKFLOW.md
-│   ├── database/
-│   │   └── DATABASE_DESIGN.md
-│   ├── security/
-│   │   ├── SECURITY_REQUIREMENTS.md
-│   │   └── THREAT_MODEL.md
-│   ├── api/
-│   │   └── API_CONVENTIONS.md
-│   └── decisions/
-│       └── ARCHITECTURE_DECISIONS.md
-├── tests/                        # Automated Vitest suite (validation, RBAC/ABAC, XP ledger)
-├── tooling/                      # Shared TypeScript & build configurations
-├── .github/workflows/ci.yml      # Automated CI pipeline
+├── src/
+│   ├── app/                      # Active Next.js App Router and API routes
+│   │   ├── api/auth/             # Login, registration, logout, and session endpoints
+│   │   ├── api/media/creative/   # Authenticated Cloudinary artwork upload
+│   │   ├── api/v1/               # Health and architecture verification endpoints
+│   │   ├── layout.tsx            # Root layout and metadata
+│   │   └── page.tsx              # Main NaijaPlay application
+│   ├── apps/web/                 # Web workspace descriptor and README
+│   ├── components/               # Navbar, games, learning, studio, profile, and other UI
+│   ├── data/                     # Mock and seed presentation data
+│   ├── docs/                     # Product, architecture, database, API, and security docs
+│   ├── hooks/                    # React hooks, including PWA install behavior
+│   ├── lib/                      # Database, authentication security, audio, and utilities
+│   ├── packages/
+│   │   ├── database/prisma/      # Prisma schema
+│   │   ├── game-engine/          # Score verification and XP domain logic
+│   │   ├── permissions/          # RBAC and age-aware authorization rules
+│   │   ├── shared/               # Domain enums and shared errors
+│   │   ├── ui/                   # Shared UI definitions
+│   │   └── validation/           # Zod schemas and age-zone validation
+│   ├── tests/                    # Vitest tests
+│   ├── tooling/                  # Shared TypeScript configuration
+│   └── types/                    # Application TypeScript types
+├── public/                       # Static assets, icons, and PWA manifest
+├── .github/workflows/            # CI workflow
 ├── package.json
-├── pnpm-workspace.yaml
+├── tsconfig.json
+├── next.config.ts
 ├── turbo.json
 └── vitest.config.ts
 ```
+
+`src/app/` is the active Next.js app directory. The old root-level layout shown in earlier documentation is not used.
 
 ---
 
@@ -78,9 +72,9 @@ naijaplay/
    npm install
    ```
 2. **Configure environment variables:**
-   Copy `.env.example` to `.env.local` and supply local credentials:
+   Copy `.env.example` to `.env` and supply the credentials needed for the services you use. Prisma loads `DATABASE_URL` and `DIRECT_URL` from `.env` when validating the schema:
    ```bash
-   cp .env.example .env.local
+   cp .env.example .env
    ```
 3. **Validate the Prisma relational schema:**
    ```bash
@@ -102,7 +96,7 @@ naijaplay/
    ```bash
    npm run dev
    ```
-   Open `http://localhost:3000` to access the **NaijaPlay Phase 1 Architecture & Verification Workbench**.
+   Open `http://localhost:3000` to use the NaijaPlay web app.
 
 ---
 

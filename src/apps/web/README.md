@@ -1,5 +1,5 @@
-# `@naijaplay/web` — Next.js Progressive Web App
+# Web application folder
 
-In the monorepo topology, `apps/web` represents the Next.js PWA application consuming `@naijaplay/shared`, `@naijaplay/validation`, `@naijaplay/permissions`, `@naijaplay/game-engine`, `@naijaplay/database`, and `@naijaplay/ui`.
+This folder currently contains workspace metadata and documentation; it is not the active Next.js application entry point.
 
-To maintain compatibility with container runtimes that execute `next dev` and `next build` from the repository root (`/`), the active Next.js App Router entry points (`app/`, `components/`, `public/`) are mounted at the root level and configured with workspace path aliases (`@naijaplay/*`) in `tsconfig.json`.
+The active web app is at `src/app/`, with shared UI components in `src/components/` and static files in the repository-level `public/` folder. Run `npm run dev`, `npm run build`, and related scripts from the repository root.

@@ -9,7 +9,7 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "db:validate": "DATABASE_URL=${DATABASE_URL:-postgresql://naijaplay:password@localhost:5432/naijaplay} DIRECT_URL=${DIRECT_URL:-postgresql://naijaplay:password@localhost:5432/naijaplay} prisma validate --schema=packages/database/prisma/schema.prisma",
+    "db:validate": "prisma validate --schema=src/packages/database/prisma/schema.prisma",
     "clean": "next clean"
   },
   "dependencies": {
