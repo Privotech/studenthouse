@@ -229,10 +229,6 @@ export const ParentAndSchoolPortal: React.FC<ParentAndSchoolPortalProps> = ({
               </label>
             </div>
 
-            <div className="text-[11px] text-slate-400 border-t border-slate-800 pt-3 flex items-center gap-1.5">
-              <Shield className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-              <span>Verified Guardian: parent@naijaplay-demo.ng (Linked)</span>
-            </div>
           </div>
         </div>
       )}

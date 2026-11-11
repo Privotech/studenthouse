@@ -37,10 +37,19 @@ export const AGE_ZONE_DESIGN_TOKENS: Record<AgeZone, AgeZoneDesignTokenSpec> = {
   [AgeZone.YOUTH]: {
     zone: AgeZone.YOUTH,
     label: "Youth Zone",
-    ageRange: "Ages 18–25",
+    ageRange: "Ages 18–24",
     minTouchTargetPx: 40,
     typographyScale: "15px base / High-density tournament & skill pathways",
     uxMode: "National tournaments, digital skill tracks, creative portfolios",
+    communicationPolicy: "Moderated community clubs & tournament brackets",
+  },
+  [AgeZone.SENIOR]: {
+    zone: AgeZone.SENIOR,
+    label: "Senior Zone",
+    ageRange: "Ages 25–30",
+    minTouchTargetPx: 40,
+    typographyScale: "15px base / Professional specialization & leadership",
+    uxMode: "Advanced tournaments, professional pathways, and leadership skills",
     communicationPolicy: "Moderated community clubs & tournament brackets",
   },
 };

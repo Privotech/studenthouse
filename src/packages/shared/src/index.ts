@@ -7,7 +7,8 @@
 export enum AgeZone {
   JUNIOR = "JUNIOR", // Ages 6–12
   TEEN = "TEEN", // Ages 13–17
-  YOUTH = "YOUTH", // Ages 18–25
+  YOUTH = "YOUTH", // Ages 18–24
+  SENIOR = "SENIOR", // Ages 25–30
 }
 
 export enum UserRole {
@@ -45,6 +46,7 @@ export enum ConsentScope {
 
 export enum XPTransactionSource {
   GAME_COMPLETION = "GAME_COMPLETION",
+  TOURNAMENT_REGISTRATION = "TOURNAMENT_REGISTRATION",
   DAILY_MISSION = "DAILY_MISSION",
   WEEKLY_MISSION = "WEEKLY_MISSION",
   LEARNING_LESSON = "LEARNING_LESSON",

@@ -12,6 +12,8 @@ import {
   createSession,
   logAuditEvent,
 } from "@/lib/db";
+import { getCanonicalPlayerSummary } from "@/lib/player-session";
+import { prisma } from "@/lib/prisma";
 
 const LoginSchema = z.object({
   identifier: z.string().min(3, "Email or username required"),
@@ -133,6 +135,17 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const canonicalUser = await prisma.user.findUnique({
+      where: { email: user.email },
+      select: { accountStatus: true },
+    });
+    if (canonicalUser && canonicalUser.accountStatus !== "ACTIVE") {
+      return NextResponse.json(
+        { error: "This account is restricted until guardian consent is approved." },
+        { status: 403 },
+      );
+    }
+
     // Success! Reset failed attempts
     resetRateLimit(`login_ip_${ip}`);
     resetRateLimit(accountRateKey);
@@ -160,7 +173,11 @@ export async function POST(req: NextRequest) {
     });
 
     // Strip secrets
-    const { password_hash, salt, ...safeUser } = user;
+    const { password_hash, salt, ...legacySafeUser } = user;
+    const safeUser = {
+      ...legacySafeUser,
+      ...(await getCanonicalPlayerSummary(user.email)),
+    };
 
     const response = NextResponse.json({
       success: true,

@@ -47,7 +47,10 @@ import { sounds } from "@/lib/audio";
 interface GameArenaProps {
   ageZone: AgeZone;
   onAwardXP: (amount: number, reason: string) => void;
+  onVerifiedXP: (amount: number, totalXP: number, level: number) => void;
   onMissionProgress: (missionId: string, delta: number) => void;
+  isAuthenticated: boolean;
+  onRequestAuth: () => void;
 }
 
 interface GameDefinition {
@@ -74,7 +77,10 @@ interface MemoryCardState {
 export const GameArena: React.FC<GameArenaProps> = ({
   ageZone,
   onAwardXP,
+  onVerifiedXP,
   onMissionProgress,
+  isAuthenticated,
+  onRequestAuth,
 }) => {
   // Navigation between game modules
   const [activeTab, setActiveTab] = useState<ArenaTab>("drills");
@@ -90,6 +96,10 @@ export const GameArena: React.FC<GameArenaProps> = ({
   const [timerSeconds, setTimerSeconds] = useState<number>(20);
   const [isGameCompleted, setIsGameCompleted] = useState<boolean>(false);
   const [answerSubmitted, setAnswerSubmitted] = useState<boolean>(false);
+  const [gameSessionId, setGameSessionId] = useState<string | null>(null);
+  const [answers, setAnswers] = useState<number[]>([]);
+  const [isSubmittingScore, setIsSubmittingScore] = useState(false);
+  const [scoreSubmissionError, setScoreSubmissionError] = useState<string | null>(null);
 
   // Retrieve questions calibrated for the player's active age zone
   const questionsForZone: GameQuestionItem[] =
@@ -326,12 +336,42 @@ export const GameArena: React.FC<GameArenaProps> = ({
 
   const handleTimeExpired = () => {
     sounds.playWrong();
+    setAnswers((current) => {
+      const next = [...current];
+      next[questionIndex] = -1;
+      return next;
+    });
     setAnswerSubmitted(true);
     setSelectedOption(-1);
     setStreak(0);
   };
 
-  const startGameSession = (gameId: string) => {
+  const startGameSession = async (gameId: string) => {
+    if (!isAuthenticated) {
+      onRequestAuth();
+      return;
+    }
+
+    setScoreSubmissionError(null);
+    try {
+      const response = await fetch("/api/games/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "start", gameId }),
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result.error || "Could not start a saved drill session.");
+      }
+
+      setGameSessionId(result.session.id);
+    } catch (error) {
+      setScoreSubmissionError(
+        error instanceof Error ? error.message : "Could not start a saved drill session.",
+      );
+      return;
+    }
+
     sounds.playClick();
     setActiveGameId(gameId);
     setQuestionIndex(0);
@@ -341,10 +381,17 @@ export const GameArena: React.FC<GameArenaProps> = ({
     setTimerSeconds(20);
     setIsGameCompleted(false);
     setAnswerSubmitted(false);
+    setAnswers([]);
+    setIsSubmittingScore(false);
   };
 
   const handleOptionClick = (optionIdx: number) => {
     if (answerSubmitted) return;
+    setAnswers((current) => {
+      const next = [...current];
+      next[questionIndex] = optionIdx;
+      return next;
+    });
     setSelectedOption(optionIdx);
     setAnswerSubmitted(true);
 
@@ -372,8 +419,41 @@ export const GameArena: React.FC<GameArenaProps> = ({
     } else {
       setIsGameCompleted(true);
       sounds.playTrophy();
-      const xpEarned = Math.round(score / 5) + 60;
-      onAwardXP(xpEarned, "Completed Formal Academic Speed Drill");
+      void completeSavedGame();
+    }
+  };
+
+  const completeSavedGame = async () => {
+    if (!gameSessionId) {
+      setScoreSubmissionError("This drill has no saved server session. Start it again to record a result.");
+      return;
+    }
+
+    setIsSubmittingScore(true);
+    setScoreSubmissionError(null);
+    try {
+      const response = await fetch("/api/games/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "complete",
+          sessionId: gameSessionId,
+          answers,
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result.error || "Could not verify this drill result.");
+      }
+
+      setScore(result.score);
+      onVerifiedXP(result.awardedXP, result.totalXP, result.level);
+    } catch (error) {
+      setScoreSubmissionError(
+        error instanceof Error ? error.message : "Could not verify this drill result.",
+      );
+    } finally {
+      setIsSubmittingScore(false);
     }
   };
 
@@ -1075,6 +1155,15 @@ export const GameArena: React.FC<GameArenaProps> = ({
                     </p>
                   </div>
 
+                  {isSubmittingScore && (
+                    <p className="text-sm text-amber-300">Verifying and saving your drill result...</p>
+                  )}
+                  {scoreSubmissionError && (
+                    <p role="alert" className="text-sm text-red-300">
+                      {scoreSubmissionError}
+                    </p>
+                  )}
+
                   <div className="inline-flex flex-col items-center justify-center p-6 rounded-2xl bg-slate-950 border border-slate-800 min-w-48 space-y-1">
                     <span className="font-mono text-4xl font-extrabold text-emerald-400">
                       {score} pts
@@ -1087,6 +1176,7 @@ export const GameArena: React.FC<GameArenaProps> = ({
                   <div className="flex items-center justify-center gap-3 pt-4 border-t border-slate-800">
                     <button
                       onClick={() => startGameSession(activeGameId)}
+                      disabled={isSubmittingScore}
                       className="rounded-xl border border-slate-700 bg-slate-800 px-5 py-2 text-xs font-semibold text-slate-300 hover:text-white"
                     >
                       Retry Drill

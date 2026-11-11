@@ -570,7 +570,7 @@ export const RoadmapModal: React.FC<RoadmapModalProps> = ({
                   <span>Youth Career & Skill Pathways</span>
                 </div>
                 <p className="text-xs text-slate-300 leading-relaxed">
-                  For the 18–25 Youth Zone: Verified portfolios, software engineering mentorship, fintech competitions, and partner internship showcases.
+                  For the 18–24 Youth Zone: Verified portfolios, software engineering mentorship, fintech competitions, and partner internship showcases.
                 </p>
               </div>
             </div>

@@ -19,8 +19,11 @@ import {
  * Never trusts a client-supplied age or ageZone string.
  */
 export function calculateAgeYears(dateOfBirthIso: string, referenceDate: Date = new Date()): number {
-  const dob = new Date(dateOfBirthIso);
-  if (Number.isNaN(dob.getTime())) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateOfBirthIso)) {
+    throw new AppError(ErrorCode.VALIDATION_ERROR, "Invalid date of birth format.");
+  }
+  const dob = new Date(`${dateOfBirthIso}T00:00:00.000Z`);
+  if (Number.isNaN(dob.getTime()) || dob.toISOString().slice(0, 10) !== dateOfBirthIso) {
     throw new AppError(ErrorCode.VALIDATION_ERROR, "Invalid date of birth format.");
   }
   let age = referenceDate.getUTCFullYear() - dob.getUTCFullYear();
@@ -32,8 +35,8 @@ export function calculateAgeYears(dateOfBirthIso: string, referenceDate: Date = 
 }
 
 /**
- * Resolves the authoritative AgeZone (JUNIOR: 6-12, TEEN: 13-17, YOUTH: 18-25) from date of birth.
- * Throws a ValidationError if the user is outside NaijaPlay's supported player age range (6–25).
+ * Resolves the authoritative AgeZone from date of birth.
+ * Throws a ValidationError if the user is outside NaijaPlay's supported player age range (6–30).
  */
 export function resolveAuthoritativeAgeZone(
   dateOfBirthIso: string,
@@ -41,10 +44,10 @@ export function resolveAuthoritativeAgeZone(
 ): { ageYears: number; ageZone: AgeZone; requiresGuardianConsent: boolean } {
   const ageYears = calculateAgeYears(dateOfBirthIso, referenceDate);
 
-  if (ageYears < 6 || ageYears > 25) {
+  if (ageYears < 6 || ageYears > 30) {
     throw new AppError(
       ErrorCode.AGE_ZONE_RESTRICTED,
-      `Player accounts require an age between 6 and 25 years (computed age: ${ageYears}).`,
+      `Player accounts require an age between 6 and 30 years (computed age: ${ageYears}).`,
       422,
     );
   }
@@ -65,9 +68,17 @@ export function resolveAuthoritativeAgeZone(
     };
   }
 
+  if (ageYears <= 24) {
+    return {
+      ageYears,
+      ageZone: AgeZone.YOUTH,
+      requiresGuardianConsent: false,
+    };
+  }
+
   return {
     ageYears,
-    ageZone: AgeZone.YOUTH,
+    ageZone: AgeZone.SENIOR,
     requiresGuardianConsent: false,
   };
 }

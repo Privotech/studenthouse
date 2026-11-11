@@ -7,13 +7,20 @@ import {
   checkRateLimit,
   recordFailedAttempt,
 } from "@/lib/auth-security";
+import { resolveAuthoritativeAgeZone } from "@naijaplay/validation";
 import {
   findUserByEmailOrUsername,
   createUser,
   createSession,
+  isRemoteDatabaseConfigured,
   logAuditEvent,
   DbUser,
 } from "@/lib/db";
+import {
+  createGuardianConsentRequest,
+  isGuardianEmailConfigured,
+  sendGuardianConsentEmail,
+} from "@/lib/guardian-consent";
 
 const RegisterSchema = z.object({
   email: z.string().email("Invalid email address").max(100),
@@ -24,13 +31,23 @@ const RegisterSchema = z.object({
     .regex(/^[a-zA-Z0-9_]+$/, "Username may only contain letters, numbers, and underscores"),
   password: z.string().min(8, "Password must be at least 8 characters"),
   displayName: z.string().min(2, "Display name must be at least 2 characters").max(50),
-  age: z.number().int().min(6, "Age must be at least 6").max(30, "Age must be 30 or below"),
+  dateOfBirth: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Date of birth must be in YYYY-MM-DD format."),
+  guardianEmail: z.string().email("Enter a valid guardian email address.").optional(),
   school: z.string().min(2, "School/Institution is required").max(100),
   state: z.string().min(2, "State is required").max(50),
   avatarCrest: z.string().default("Scholar"),
 });
 
 export async function POST(req: NextRequest) {
+  if (!isRemoteDatabaseConfigured()) {
+    return NextResponse.json(
+      { error: "Neon PostgreSQL is not configured. Registration cannot be saved." },
+      { status: 503 },
+    );
+  }
+
   const ip =
     req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
     req.headers.get("x-real-ip") ||
@@ -74,8 +91,48 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { email, username, password, displayName, age, school, state, avatarCrest } =
+    const {
+      email,
+      username,
+      password,
+      displayName,
+      dateOfBirth,
+      guardianEmail,
+      school,
+      state,
+      avatarCrest,
+    } =
       validated.data;
+    let ageDetails: ReturnType<typeof resolveAuthoritativeAgeZone>;
+    try {
+      ageDetails = resolveAuthoritativeAgeZone(dateOfBirth);
+    } catch (error) {
+      return NextResponse.json(
+        { error: error instanceof Error ? error.message : "Date of birth is outside the supported age range." },
+        { status: 422 }
+      );
+    }
+    const { ageYears: age, ageZone } = ageDetails;
+    if (ageDetails.requiresGuardianConsent) {
+      if (!guardianEmail) {
+        return NextResponse.json(
+          { error: "A guardian email is required for players under 18." },
+          { status: 400 },
+        );
+      }
+      if (guardianEmail.trim().toLowerCase() === email.trim().toLowerCase()) {
+        return NextResponse.json(
+          { error: "A guardian must use a different email address." },
+          { status: 400 },
+        );
+      }
+      if (!isGuardianEmailConfigured()) {
+        return NextResponse.json(
+          { error: "Guardian email is not configured. Add the Resend settings to the root .env file." },
+          { status: 503 },
+        );
+      }
+    }
 
     // Strict Password Strength Check
     const strength = evaluatePasswordStrength(password);
@@ -109,16 +166,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Determine Age Zone
-    let ageZone: "JUNIOR" | "TEEN" | "YOUTH" | "SENIOR" = "JUNIOR";
-    if (age >= 25) {
-      ageZone = "SENIOR";
-    } else if (age >= 18) {
-      ageZone = "YOUTH";
-    } else if (age >= 13) {
-      ageZone = "TEEN";
-    }
-
     // Initials from Display Name
     const nameParts = displayName.trim().split(/\s+/);
     const avatarInitials =
@@ -140,6 +187,7 @@ export async function POST(req: NextRequest) {
       salt,
       iterations,
       display_name: displayName.trim(),
+      date_of_birth: dateOfBirth,
       age,
       age_zone: ageZone,
       school: school.trim(),
@@ -158,6 +206,38 @@ export async function POST(req: NextRequest) {
 
     await createUser(newUser);
 
+    await logAuditEvent({
+      user_id: userId,
+      event_type: "REGISTER",
+      ip_address: ip,
+      details: { email: newUser.email, ageZone, school, iterations },
+    });
+
+    if (ageDetails.requiresGuardianConsent) {
+      const request = await createGuardianConsentRequest(newUser.email, guardianEmail);
+      try {
+        await sendGuardianConsentEmail(request.guardianEmail, request.token);
+      } catch (error) {
+        console.error("Guardian consent email delivery failed.");
+        return NextResponse.json(
+          {
+            error: "The player account was created, but the guardian email could not be delivered. Resend it to continue.",
+            accountCreated: true,
+            retryGuardianEmail: true,
+          },
+          { status: 502 },
+        );
+      }
+
+      return NextResponse.json(
+        {
+          pendingGuardianConsent: true,
+          message: "Account created. A consent request was sent to the guardian email; sign-in is enabled after approval.",
+        },
+        { status: 202 },
+      );
+    }
+
     // Issue Session Token (7-day validity)
     const sessionToken = generateSessionToken();
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
@@ -170,19 +250,6 @@ export async function POST(req: NextRequest) {
       ip_address: ip,
       user_agent: userAgent,
       created_at: nowIso,
-    });
-
-    // Audit log
-    await logAuditEvent({
-      user_id: userId,
-      event_type: "REGISTER",
-      ip_address: ip,
-      details: {
-        email: newUser.email,
-        ageZone,
-        school,
-        iterations,
-      },
     });
 
     // Strip sensitive fields

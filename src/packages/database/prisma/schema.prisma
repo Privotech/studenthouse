@@ -27,7 +27,8 @@ enum UserRole {
 enum AgeZone {
   JUNIOR // Ages 6–12
   TEEN   // Ages 13–17
-  YOUTH  // Ages 18–25
+  YOUTH  // Ages 18–24
+  SENIOR // Ages 25–30
 }
 
 enum AccountStatus {
@@ -44,6 +45,13 @@ enum ConsentStatus {
   GRANTED
   REVOKED
   EXPIRED
+}
+
+enum GuardianConsentRequestStatus {
+  PENDING
+  GRANTED
+  EXPIRED
+  REVOKED
 }
 
 enum ProfileVisibility {
@@ -82,6 +90,7 @@ enum MissionFrequency {
 
 enum XPTransactionSource {
   GAME_COMPLETION
+  TOURNAMENT_REGISTRATION
   DAILY_MISSION
   WEEKLY_MISSION
   LEARNING_LESSON
@@ -120,8 +129,13 @@ enum ReportReasonCategory {
 model User {
   id                  String        @id @default(uuid()) @db.Uuid
   email               String?       @unique
+  username            String        @unique @db.VarChar(25)
   emailVerifiedAt     DateTime?
   passwordHash        String?
+  passwordSalt        String?       @db.VarChar(64)
+  passwordIterations  Int           @default(100000)
+  failedAttempts      Int           @default(0)
+  lockedUntil         DateTime?
   role                UserRole      @default(PLAYER)
   accountStatus       AccountStatus @default(PENDING_VERIFICATION)
   countryCode         String        @default("NG") @db.VarChar(2)
@@ -131,7 +145,9 @@ model User {
 
   // Relations
   playerProfile       PlayerProfile?
+  sessions            AuthSession[]
   guardianProfile     Guardian?
+  guardianConsentRequests GuardianConsentRequest[]
   schoolMemberships   SchoolMembership[]
   notifications       Notification[]
   reportsSubmitted    ContentReport[]    @relation("ReporterUser")
@@ -145,10 +161,14 @@ model User {
 model PlayerProfile {
   id                        String            @id @default(uuid()) @db.Uuid
   userId                    String            @unique @db.Uuid
-  displayName               String            @unique @db.VarChar(20)
+  displayName               String            @unique @db.VarChar(50)
   dateOfBirth               DateTime          @db.Date
   ageZone                   AgeZone
   avatarId                  String            @default("default_explorer") @db.VarChar(64)
+  schoolName                String            @default("") @db.VarChar(100)
+  stateCode                 String            @default("") @db.VarChar(50)
+  level                     Int               @default(1)
+  totalXp                   Int               @default(0)
   profileVisibility         ProfileVisibility @default(PRIVATE_GUARDIAN_ONLY)
   dailyScreenTimeLimitMins  Int?              // Enforced for JUNIOR & TEEN zones
   currentStreakDays         Int               @default(0)
@@ -174,6 +194,20 @@ model PlayerProfile {
   @@index([displayName])
 }
 
+model AuthSession {
+  id                  String    @id @default(uuid()) @db.Uuid
+  userId              String    @db.Uuid
+  tokenHash           String    @unique @db.VarChar(64)
+  expiresAt           DateTime
+  ipAddress           String    @db.VarChar(64)
+  userAgent           String    @db.VarChar(512)
+  createdAt           DateTime  @default(now())
+
+  user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+}
+
 model Guardian {
   id                  String            @id @default(uuid()) @db.Uuid
   userId              String            @unique @db.Uuid
@@ -186,6 +220,23 @@ model Guardian {
   // Relations
   user                User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   consents            GuardianConsent[]
+}
+
+model GuardianConsentRequest {
+  id                    String                        @id @default(uuid()) @db.Uuid
+  childUserId           String                        @unique @db.Uuid
+  guardianEmail         String                        @db.VarChar(254)
+  verificationTokenHash String                        @unique @db.VarChar(64)
+  status                GuardianConsentRequestStatus  @default(PENDING)
+  expiresAt             DateTime
+  grantedAt             DateTime?
+  createdAt             DateTime                      @default(now())
+  updatedAt             DateTime                      @updatedAt
+
+  child                 User                          @relation(fields: [childUserId], references: [id], onDelete: Cascade)
+
+  @@index([guardianEmail, status])
+  @@index([status, expiresAt])
 }
 
 model GuardianConsent {
@@ -262,7 +313,7 @@ model Game {
   description             String        @db.Text
   category                GameCategory
   minAgeZone              AgeZone       @default(JUNIOR)
-  maxAgeZone              AgeZone       @default(YOUTH)
+  maxAgeZone              AgeZone       @default(SENIOR)
   maxPossibleScore        Int
   pointsPerCorrectAnswer  Int
   maxQuestionsPerSession  Int
@@ -419,7 +470,7 @@ model LearningCourse {
   title               String             @db.VarChar(140)
   subjectCategory     String             @db.VarChar(64)
   minAgeZone          AgeZone            @default(JUNIOR)
-  maxAgeZone          AgeZone            @default(YOUTH)
+  maxAgeZone          AgeZone            @default(SENIOR)
   isPublished         Boolean            @default(false)
   createdAt           DateTime           @default(now())
   updatedAt           DateTime           @updatedAt

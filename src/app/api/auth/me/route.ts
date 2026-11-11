@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { findSession, findUserById } from "@/lib/db";
+import { getCanonicalPlayerSummary } from "@/lib/player-session";
 
 export async function GET(req: NextRequest) {
   try {
@@ -28,7 +29,11 @@ export async function GET(req: NextRequest) {
     }
 
     // Strip sensitive fields
-    const { password_hash, salt, ...safeUser } = user;
+    const { password_hash, salt, ...legacySafeUser } = user;
+    const safeUser = {
+      ...legacySafeUser,
+      ...(await getCanonicalPlayerSummary(user.email)),
+    };
 
     return NextResponse.json({
       authenticated: true,

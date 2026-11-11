@@ -21,7 +21,7 @@ import {
   UserPlus,
 } from "lucide-react";
 import { evaluatePasswordStrength, PasswordScore } from "@/lib/auth-security";
-import { AgeZone, PlayerState } from "@/types/naijaplay";
+import { PlayerState } from "@/types/naijaplay";
 import { sounds } from "@/lib/audio";
 
 interface AuthModalProps {
@@ -48,6 +48,27 @@ const CRESTS = [
   { id: "Summit", label: "Summit", desc: "Peak Performance & Innovation" },
 ];
 
+const dateYearsAgo = (years: number) => {
+  const date = new Date();
+  date.setFullYear(date.getFullYear() - years);
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${date.getFullYear()}-${month}-${day}`;
+};
+
+const getAgeFromDateOfBirth = (dateOfBirth: string) => {
+  const birthDate = new Date(`${dateOfBirth}T00:00:00`);
+  const today = new Date();
+  let age = today.getFullYear() - birthDate.getFullYear();
+  if (
+    today.getMonth() < birthDate.getMonth() ||
+    (today.getMonth() === birthDate.getMonth() && today.getDate() < birthDate.getDate())
+  ) {
+    age--;
+  }
+  return age;
+};
+
 export const AuthModal: React.FC<AuthModalProps> = ({
   isOpen,
   onClose,
@@ -71,13 +92,16 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [regUsername, setRegUsername] = useState("");
   const [regPassword, setRegPassword] = useState("");
   const [showRegPassword, setShowRegPassword] = useState(false);
-  const [regAge, setRegAge] = useState<number>(20);
+  const [regDateOfBirth, setRegDateOfBirth] = useState(dateYearsAgo(20));
+  const [regGuardianEmail, setRegGuardianEmail] = useState("");
+  const [canResendGuardianEmail, setCanResendGuardianEmail] = useState(false);
   const [regSchool, setRegSchool] = useState("");
   const [regState, setRegState] = useState("Lagos");
   const [regCrest, setRegCrest] = useState("Scholar");
 
   // Real-time password analysis computed pure on render
   const passwordAnalysis: PasswordScore = evaluatePasswordStrength(regPassword);
+  const needsGuardianConsent = getAgeFromDateOfBirth(regDateOfBirth) < 18;
 
   // Fetch NeonDB status on mount
   useEffect(() => {
@@ -91,41 +115,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
   if (!isOpen) return null;
 
-  // Calculate age zone based on chosen age (6-30)
-  const calculateAgeZone = (age: number): AgeZone => {
-    if (age >= 25) return "SENIOR";
-    if (age >= 18) return "YOUTH";
-    if (age >= 13) return "TEEN";
-    return "JUNIOR";
-  };
-
-  const currentZone = calculateAgeZone(regAge);
-
-  const getZoneDescription = (zone: AgeZone) => {
-    switch (zone) {
-      case "JUNIOR":
-        return "Junior Zone (Ages 6–12) · Foundational Academics & Logic Drills";
-      case "TEEN":
-        return "Teen Zone (Ages 13–17) · WAEC/JAMB Prep, STEM & Coding Labs";
-      case "YOUTH":
-        return "Youth Zone (Ages 18–24) · Higher Ed, AI Systems, Career Skills";
-      case "SENIOR":
-        return "Senior Zone (Ages 25–30) · Professional Specialization & Leadership";
-    }
-  };
-
-  // Quick Demo Account Pre-fill
-  const fillDemoAccount = () => {
-    setLoginIdentifier("chisom_vanguard");
-    setLoginPassword("Naija2026!");
-    setErrorMessage(null);
-  };
-
   // Handle Login Submit
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
     setSuccessMessage(null);
+    setCanResendGuardianEmail(false);
     setIsLoading(true);
 
     try {
@@ -183,6 +178,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     e.preventDefault();
     setErrorMessage(null);
     setSuccessMessage(null);
+    setCanResendGuardianEmail(false);
 
     if (!passwordAnalysis.isValid) {
       setErrorMessage("Password must satisfy minimum security complexity requirements.");
@@ -200,7 +196,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           username: regUsername,
           password: regPassword,
           displayName: regName,
-          age: regAge,
+          dateOfBirth: regDateOfBirth,
+          guardianEmail: needsGuardianConsent ? regGuardianEmail : undefined,
           school: regSchool,
           state: regState,
           avatarCrest: regCrest,
@@ -212,12 +209,18 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       if (!res.ok) {
         sounds.playWrong();
         setErrorMessage(data.error || "Registration rejected.");
+        setCanResendGuardianEmail(Boolean(data.accountCreated && data.retryGuardianEmail));
         setIsLoading(false);
         return;
       }
 
       sounds.playTrophy();
       setSuccessMessage(data.message);
+
+      if (data.pendingGuardianConsent) {
+        setIsLoading(false);
+        return;
+      }
 
       if (data.sessionToken) {
         localStorage.setItem("np_session_token", data.sessionToken);
@@ -242,6 +245,35 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       }, 800);
     } catch {
       setErrorMessage("Network error during registration.");
+      setIsLoading(false);
+    }
+  };
+
+  const handleResendGuardianEmail = async () => {
+    setErrorMessage(null);
+    setSuccessMessage(null);
+    setIsLoading(true);
+    try {
+      const response = await fetch("/api/auth/guardian-consent/resend", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: regEmail,
+          username: regUsername,
+          password: regPassword,
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result.error || "Could not resend the guardian email.");
+      }
+      setCanResendGuardianEmail(false);
+      setSuccessMessage(result.message);
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : "Could not resend the guardian email.",
+      );
+    } finally {
       setIsLoading(false);
     }
   };
@@ -326,6 +358,16 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     ))}
                   </ul>
                 )}
+                {canResendGuardianEmail && (
+                  <button
+                    type="button"
+                    onClick={handleResendGuardianEmail}
+                    disabled={isLoading}
+                    className="mt-2 rounded-lg border border-rose-400/40 px-3 py-1.5 font-semibold text-rose-200 hover:bg-rose-900/30 disabled:opacity-50"
+                  >
+                    {isLoading ? "Resending..." : "Resend guardian consent email"}
+                  </button>
+                )}
               </div>
             </div>
           )}
@@ -343,21 +385,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           {tab === "signin" ? (
             /* SIGN IN FORM */
             <form onSubmit={handleLoginSubmit} className="space-y-4">
-              {/* Quick Demo Pre-Fill Banner */}
-              <div className="flex items-center justify-between rounded-xl border border-emerald-900/50 bg-emerald-950/20 p-3 text-xs">
-                <div>
-                  <p className="font-semibold text-emerald-300">Verified Test Account Available</p>
-                  <p className="text-[11px] text-slate-400">Chisom Okafor (UNILAG) · Level 14 · 4,850 XP</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={fillDemoAccount}
-                  className="rounded-lg bg-emerald-600/30 hover:bg-emerald-600/50 border border-emerald-500/40 px-2.5 py-1 text-xs font-mono font-bold text-emerald-200 transition-colors"
-                >
-                  Quick Fill
-                </button>
-              </div>
-
               <div>
                 <label className="block text-xs font-semibold text-slate-300 mb-1.5">
                   Email Address or Username
@@ -371,7 +398,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     required
                     value={loginIdentifier}
                     onChange={(e) => setLoginIdentifier(e.target.value)}
-                    placeholder="e.g. chisom_vanguard or chisom.okafor@naijaplay.ng"
+                    placeholder="Enter your username or email address"
                     className="w-full rounded-xl border border-slate-700 bg-slate-900 pl-9 pr-3 py-2.5 text-xs text-white placeholder-slate-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
                   />
                 </div>
@@ -478,28 +505,42 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 </div>
               </div>
 
-              {/* Age Selector & Zone Auto-Detection (Ages 6 to 30) */}
-              <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-3">
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-xs font-semibold text-slate-300">
-                    Select Age (6 to 30): <span className="text-emerald-400 font-mono font-bold text-sm">{regAge} Years Old</span>
-                  </label>
-                  <span className="rounded bg-emerald-500/20 px-2 py-0.5 text-[10px] font-mono font-bold text-emerald-300">
-                    {currentZone}
-                  </span>
-                </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  Date of Birth
+                </label>
                 <input
-                  type="range"
-                  min="6"
-                  max="30"
-                  value={regAge}
-                  onChange={(e) => setRegAge(parseInt(e.target.value, 10))}
-                  className="w-full accent-emerald-500 cursor-pointer h-2 bg-slate-800 rounded-lg"
+                  type="date"
+                  required
+                  min={dateYearsAgo(30)}
+                  max={dateYearsAgo(6)}
+                  value={regDateOfBirth}
+                  onChange={(e) => setRegDateOfBirth(e.target.value)}
+                  className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-white focus:border-emerald-500 focus:outline-none"
                 />
                 <p className="mt-1 text-[11px] text-slate-400">
-                  {getZoneDescription(currentZone)}
+                  Your age group is calculated securely from your date of birth.
                 </p>
               </div>
+
+              {needsGuardianConsent && (
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    Guardian Email (required for players under 18)
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    value={regGuardianEmail}
+                    onChange={(e) => setRegGuardianEmail(e.target.value)}
+                    placeholder="guardian@example.com"
+                    className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-white placeholder-slate-500 focus:border-emerald-500 focus:outline-none"
+                  />
+                  <p className="mt-1 text-[11px] text-slate-400">
+                    The account stays restricted until the guardian approves by email.
+                  </p>
+                </div>
+              )}
 
               {/* School and State */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -665,16 +706,24 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         {/* Footer Database Diagnostics Bar */}
         <div className="border-t border-slate-800/80 bg-slate-950 px-6 py-3 flex items-center justify-between text-[11px] text-slate-500 font-mono">
           <div className="flex items-center gap-2">
-            <Database className="w-3.5 h-3.5 text-emerald-400" />
+            <Database
+              className={`w-3.5 h-3.5 ${
+                dbStatus?.status === "online" ? "text-emerald-400" : "text-amber-400"
+              }`}
+            />
             <span>
-              {dbStatus?.database?.isConfigured
-                ? "Neon PostgreSQL Serverless (Active Cluster)"
-                : "NeonDB PostgreSQL Adapter (Local Synced)"}
+              {dbStatus?.status === "online"
+                ? `PostgreSQL connected · ${dbStatus.database.userCount} accounts · ${dbStatus.database.gameSessionCount} drills`
+                : "PostgreSQL unavailable · data cannot be saved"}
             </span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            <span>SSL Secured · Port 5432</span>
+            <span
+              className={`h-1.5 w-1.5 rounded-full ${
+                dbStatus?.status === "online" ? "bg-emerald-400" : "bg-amber-400"
+              }`}
+            />
+            <span>{dbStatus?.database?.isConfigured ? "Neon PostgreSQL" : "Local storage"}</span>
           </div>
         </div>
       </div>

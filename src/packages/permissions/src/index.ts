@@ -141,6 +141,17 @@ export function getAgeZonePrivacyDefaults(ageZone: AgeZone): PrivacyDefaults {
         allowPreciseGeolocation: false,
         defaultDailyScreenTimeMinutes: null,
       };
+    case AgeZone.SENIOR:
+      return {
+        ageZone: AgeZone.SENIOR,
+        profileVisibility: "PUBLIC_OPT_IN",
+        requiresGuardianConsent: false,
+        requiresPreModerationForUploads: true,
+        allowUnrestrictedDirectMessaging: false,
+        allowBehavioralAdvertising: false,
+        allowPreciseGeolocation: false,
+        defaultDailyScreenTimeMinutes: null,
+      };
   }
 }
 
@@ -275,6 +286,7 @@ export function authorizeAction(
       [AgeZone.JUNIOR]: 1,
       [AgeZone.TEEN]: 2,
       [AgeZone.YOUTH]: 3,
+      [AgeZone.SENIOR]: 4,
     };
 
     if (

@@ -93,7 +93,7 @@ const PRESET_SCENARIOS: ReadonlyArray<ScenarioPreset> = [
     id: "junior-in-youth-tournament",
     label: "Age Boundary · Junior Entering Youth League",
     description:
-      "A 10-year-old Junior player attempts to register for an 18–25 Youth Zone tournament.",
+      "A 10-year-old Junior player attempts to register for an 18–24 Youth Zone tournament.",
     actorUserId: "11111111-1111-4111-8111-111111111111",
     role: UserRole.PLAYER,
     accountStatus: AccountStatus.ACTIVE,
@@ -392,7 +392,8 @@ export function PermissionSandbox() {
                 <option value="">Any Zone (JUNIOR+)</option>
                 <option value={AgeZone.JUNIOR}>JUNIOR (6–12)</option>
                 <option value={AgeZone.TEEN}>TEEN (13–17)</option>
-                <option value={AgeZone.YOUTH}>YOUTH (18–25)</option>
+                <option value={AgeZone.YOUTH}>YOUTH (18–24)</option>
+                <option value={AgeZone.SENIOR}>SENIOR (25–30)</option>
               </select>
             </div>
           </div>

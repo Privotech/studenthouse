@@ -21,7 +21,12 @@ import { Sparkles, ShieldAlert, Map } from "lucide-react";
 
 export default function NaijaPlayApp() {
   const [activeTab, setActiveTab] = useState<NavTab>("home");
-  const [player, setPlayer] = useState<PlayerState>(INITIAL_PLAYER);
+  const [player, setPlayer] = useState<PlayerState>(() => ({
+    ...INITIAL_PLAYER,
+    displayName: "Guest Scholar",
+    avatarInitials: "GS",
+    school: "Visitor Portal",
+  }));
   const [missions, setMissions] = useState(INITIAL_MISSIONS);
   const [submissions, setSubmissions] = useState<CreativeSubmissionItem[]>(CREATIVE_SUBMISSIONS);
   const [soundEnabled, setSoundEnabled] = useState(true);
@@ -29,7 +34,7 @@ export default function NaijaPlayApp() {
   const [isAdminOpen, setIsAdminOpen] = useState(false);
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [authDefaultTab, setAuthDefaultTab] = useState<"signin" | "register">("signin");
-  const [isAuthenticated, setIsAuthenticated] = useState(true);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   // Restore authenticated session from localStorage or verify token with NeonDB
   useEffect(() => {
@@ -111,29 +116,21 @@ export default function NaijaPlayApp() {
   };
 
   // Award XP and calculate Level Up
-  const handleAwardXP = (amount: number, reason: string) => {
-    setPlayer((prev) => {
-      const newXp = prev.xp + amount;
-      let newLevel = prev.level;
-      let newNextXp = prev.nextLevelXp;
+  const handleAwardXP = (_amount: number, reason: string) => {
+    showToast(`XP for "${reason}" is not yet connected to verified database progress.`);
+  };
 
-      if (newXp >= newNextXp) {
-        newLevel += 1;
-        newNextXp = newLevel * 150;
-        sounds.playLevelUp();
-        showToast(`Level Conferred: Advanced to Level ${newLevel}! (+${amount} XP)`);
-      } else {
-        showToast(`+${amount} XP Conferred · ${reason}`);
-      }
-
-      return {
-        ...prev,
-        xp: newXp,
-        level: newLevel,
-        nextLevelXp: newNextXp,
-        coins: prev.coins + Math.round(amount / 5),
-      };
-    });
+  const handleVerifiedXP = (amount: number, totalXP: number, level: number) => {
+    setPlayer((prev) => ({
+      ...prev,
+      xp: totalXP,
+      level,
+      nextLevelXp: level * 150,
+      coins: prev.coins + Math.round(amount / 5),
+    }));
+    if (amount > 0) {
+      showToast(`Verified drill saved · +${amount} XP`);
+    }
   };
 
   // Update Mission progress
@@ -332,7 +329,13 @@ export default function NaijaPlayApp() {
           <GameArena
             ageZone={player.ageZone}
             onAwardXP={handleAwardXP}
+            onVerifiedXP={handleVerifiedXP}
             onMissionProgress={handleMissionProgress}
+            isAuthenticated={isAuthenticated}
+            onRequestAuth={() => {
+              setAuthDefaultTab("signin");
+              setIsAuthOpen(true);
+            }}
           />
         )}
 
@@ -340,6 +343,12 @@ export default function NaijaPlayApp() {
           <CompetitionArena
             ageZone={player.ageZone}
             onAwardXP={handleAwardXP}
+            onVerifiedXP={handleVerifiedXP}
+            isAuthenticated={isAuthenticated}
+            onRequestAuth={() => {
+              setAuthDefaultTab("signin");
+              setIsAuthOpen(true);
+            }}
           />
         )}
 

@@ -44,19 +44,26 @@ describe("1. Shared Validation & Server-Side Age-Group Resolution (@naijaplay/va
     expect(res.requiresGuardianConsent).toBe(true);
   });
 
-  it("computes YOUTH zone (ages 18–25) without mandatory guardian consent", () => {
+  it("computes YOUTH zone (ages 18–24) without mandatory guardian consent", () => {
     const res = resolveAuthoritativeAgeZone("2005-01-20", REFERENCE_DATE);
     expect(res.ageYears).toBe(21);
     expect(res.ageZone).toBe(AgeZone.YOUTH);
     expect(res.requiresGuardianConsent).toBe(false);
   });
 
-  it("rejects ages below 6 or above 25 with AGE_ZONE_RESTRICTED", () => {
+  it("computes SENIOR zone for ages 25–30 without mandatory guardian consent", () => {
+    const res = resolveAuthoritativeAgeZone("1996-10-30", REFERENCE_DATE);
+    expect(res.ageYears).toBe(30);
+    expect(res.ageZone).toBe(AgeZone.SENIOR);
+    expect(res.requiresGuardianConsent).toBe(false);
+  });
+
+  it("rejects ages below 6 or above 30 with AGE_ZONE_RESTRICTED", () => {
     expect(() => resolveAuthoritativeAgeZone("2023-01-01", REFERENCE_DATE)).toThrowError(
-      /between 6 and 25 years/,
+      /between 6 and 30 years/,
     );
     expect(() => resolveAuthoritativeAgeZone("1995-01-01", REFERENCE_DATE)).toThrowError(
-      /between 6 and 25 years/,
+      /between 6 and 30 years/,
     );
   });
 

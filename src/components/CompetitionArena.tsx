@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Trophy,
   Users,
@@ -22,15 +22,44 @@ import { sounds } from "@/lib/audio";
 interface CompetitionArenaProps {
   ageZone: AgeZone;
   onAwardXP: (amount: number, reason: string) => void;
+  onVerifiedXP: (amount: number, totalXP: number, level: number) => void;
+  isAuthenticated: boolean;
+  onRequestAuth: () => void;
 }
 
 export const CompetitionArena: React.FC<CompetitionArenaProps> = ({
   ageZone,
   onAwardXP,
+  onVerifiedXP,
+  isAuthenticated,
+  onRequestAuth,
 }) => {
   const [filterType, setFilterType] = useState<"All" | "Individual" | "School vs School" | "State vs State">("All");
   const [joinedTournaments, setJoinedTournaments] = useState<string[]>([]);
+  const [registrationError, setRegistrationError] = useState<string | null>(null);
+  const [registeringTournamentId, setRegisteringTournamentId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"tournaments" | "leaderboard" | "schools">("tournaments");
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setJoinedTournaments([]);
+      return;
+    }
+
+    fetch("/api/tournaments")
+      .then(async (response) => {
+        const result = await response.json();
+        if (!response.ok) {
+          throw new Error(result.error || "Could not load tournament registrations.");
+        }
+        setJoinedTournaments(result.joinedTournamentIds);
+      })
+      .catch((error: unknown) => {
+        setRegistrationError(
+          error instanceof Error ? error.message : "Could not load tournament registrations.",
+        );
+      });
+  }, [isAuthenticated]);
 
   const filteredTournaments = TOURNAMENTS.filter((t) => {
     if (filterType !== "All" && t.type !== filterType) return false;
@@ -75,11 +104,39 @@ export const CompetitionArena: React.FC<CompetitionArenaProps> = ({
     },
   ];
 
-  const handleJoin = (tourney: Tournament) => {
-    sounds.playTrophy();
-    if (!joinedTournaments.includes(tourney.id)) {
-      setJoinedTournaments([...joinedTournaments, tourney.id]);
-      onAwardXP(50, `Registered for ${tourney.title}`);
+  const handleJoin = async (tourney: Tournament) => {
+    if (!isAuthenticated) {
+      onRequestAuth();
+      return;
+    }
+    if (joinedTournaments.includes(tourney.id)) return;
+
+    setRegisteringTournamentId(tourney.id);
+    setRegistrationError(null);
+    try {
+      const response = await fetch("/api/tournaments/entries", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tournamentId: tourney.id }),
+      });
+      const result = await response.json();
+      if (response.status === 401) {
+        onRequestAuth();
+        return;
+      }
+      if (!response.ok) {
+        throw new Error(result.error || "Could not register for this tournament.");
+      }
+
+      sounds.playTrophy();
+      setJoinedTournaments((current) => [...current, tourney.id]);
+      onVerifiedXP(result.awardedXP, result.totalXP, result.level);
+    } catch (error) {
+      setRegistrationError(
+        error instanceof Error ? error.message : "Could not register for this tournament.",
+      );
+    } finally {
+      setRegisteringTournamentId(null);
     }
   };
 
@@ -186,6 +243,11 @@ export const CompetitionArena: React.FC<CompetitionArenaProps> = ({
       {/* TOURNAMENTS TAB */}
       {activeTab === "tournaments" && (
         <div className="space-y-5">
+          {registrationError && (
+            <p role="alert" className="rounded-xl border border-red-900/70 bg-red-950/30 p-3 text-sm text-red-300">
+              {registrationError}
+            </p>
+          )}
           {/* Filter Bar */}
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-3">
             <div className="flex items-center gap-1 text-xs text-slate-400 font-mono">
@@ -259,6 +321,7 @@ export const CompetitionArena: React.FC<CompetitionArenaProps> = ({
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => handleJoin(tourney)}
+                        disabled={registeringTournamentId === tourney.id || isJoined}
                         className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all shadow-md flex items-center justify-center gap-2 ${
                           isJoined
                             ? "bg-emerald-950/80 text-emerald-300 border border-emerald-700/60"

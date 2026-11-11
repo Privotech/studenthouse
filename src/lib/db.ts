@@ -1,4 +1,6 @@
 import { Pool, neon } from "@neondatabase/serverless";
+import { AgeZone, AccountStatus, UserRole } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
 
 /**
  * Neon PostgreSQL Database Client & Storage Engine
@@ -14,6 +16,7 @@ export interface DbUser {
   salt: string;
   iterations: number;
   display_name: string;
+  date_of_birth: string;
   age: number;
   age_zone: "JUNIOR" | "TEEN" | "YOUTH" | "SENIOR";
   school: string;
@@ -29,6 +32,8 @@ export interface DbUser {
   created_at: string;
   updated_at: string;
 }
+
+export const isRemoteDatabaseConfigured = () => isNeonConfigured;
 
 export interface DbSession {
   id: string;
@@ -60,39 +65,6 @@ const isNeonConfigured =
 const fallbackUsers = new Map<string, DbUser>();
 const fallbackSessions = new Map<string, DbSession>();
 const fallbackAuditLogs: DbAuditLog[] = [];
-
-// Seed default verified test account
-const DEFAULT_SALT = "a1b2c3d4e5f67890a1b2c3d4e5f67890";
-// Hash for "Naija2026!" with salt and 100k iterations
-const DEFAULT_HASH = "428f87a49f78d64a8044acc8645dca32c4431133942f0968966c94b53927056b13166edb9eabdbb6baf0a741e32f6c372e04d654ef4a069da02829fa270f1987";
-
-const SEED_USER: DbUser = {
-  id: "usr_chisom_okafor_2026",
-  email: "chisom.okafor@naijaplay.ng",
-  username: "chisom_vanguard",
-  password_hash: DEFAULT_HASH,
-  salt: DEFAULT_SALT,
-  iterations: 100000,
-  display_name: "Chisom Okafor",
-  age: 21,
-  age_zone: "YOUTH",
-  school: "University of Lagos (UNILAG)",
-  state: "Lagos State",
-  avatar_crest: "Vanguard",
-  avatar_initials: "CO",
-  role: "STUDENT",
-  level: 1,
-  xp: 100, // 100 Welcome Bonus XP
-  streak_days: 1,
-  failed_attempts: 0,
-  locked_until: null,
-  created_at: new Date().toISOString(),
-  updated_at: new Date().toISOString(),
-};
-
-fallbackUsers.set(SEED_USER.email, SEED_USER);
-fallbackUsers.set(SEED_USER.username, SEED_USER);
-fallbackUsers.set(SEED_USER.id, SEED_USER);
 
 let poolInstance: Pool | null = null;
 let tablesInitialized = false;
@@ -166,7 +138,8 @@ export async function initTablesIfRemote(): Promise<void> {
 
     tablesInitialized = true;
   } catch (err) {
-    console.warn("Remote Neon bootstrap notice (falling back to memory-synced adapter):", err);
+    console.error("Failed to initialize the Neon database tables:", err);
+    throw err;
   }
 }
 
@@ -185,7 +158,8 @@ export async function findUserByEmailOrUsername(identifier: string): Promise<DbU
       `) as DbUser[];
       if (rows && rows.length > 0) return rows[0];
     } catch (e) {
-      console.warn("Neon query error, using local store:", e);
+      console.error("Neon user lookup failed:", e);
+      throw e;
     }
   }
 
@@ -210,7 +184,8 @@ export async function findUserById(id: string): Promise<DbUser | null> {
       `) as DbUser[];
       if (rows && rows.length > 0) return rows[0];
     } catch (e) {
-      console.warn("Neon query error, using local store:", e);
+      console.error("Neon user lookup failed:", e);
+      throw e;
     }
   }
 
@@ -219,10 +194,39 @@ export async function findUserById(id: string): Promise<DbUser | null> {
 
 export async function createUser(user: DbUser): Promise<DbUser> {
   if (isNeonConfigured) {
-    try {
-      await initTablesIfRemote();
-      const sql = neon(connectionString);
-      await sql`
+    await initTablesIfRemote();
+    await prisma.$transaction(async (transaction) => {
+      const canonicalUser = await transaction.user.create({
+        data: {
+          email: user.email,
+          username: user.username,
+          passwordHash: user.password_hash,
+          passwordSalt: user.salt,
+          passwordIterations: user.iterations,
+          failedAttempts: user.failed_attempts,
+          lockedUntil: user.locked_until ? new Date(user.locked_until) : null,
+          role: UserRole.PLAYER,
+          accountStatus:
+            user.age < 18
+              ? AccountStatus.PENDING_GUARDIAN_CONSENT
+              : AccountStatus.ACTIVE,
+          playerProfile: {
+            create: {
+              displayName: user.display_name,
+              dateOfBirth: new Date(`${user.date_of_birth}T00:00:00.000Z`),
+              ageZone: user.age_zone as AgeZone,
+              avatarId: user.avatar_crest,
+              schoolName: user.school,
+              stateCode: user.state,
+              level: user.level,
+              totalXp: user.xp,
+              currentStreakDays: user.streak_days,
+            },
+          },
+        },
+      });
+
+      await transaction.$executeRaw`
         INSERT INTO np_users (
           id, email, username, password_hash, salt, iterations,
           display_name, age, age_zone, school, state, avatar_crest,
@@ -237,9 +241,8 @@ export async function createUser(user: DbUser): Promise<DbUser> {
           ${user.updated_at}
         )
       `;
-    } catch (e) {
-      console.warn("Neon insert error, caching in local store:", e);
-    }
+      return canonicalUser.id;
+    });
   }
 
   fallbackUsers.set(user.id, user);
@@ -258,7 +261,8 @@ export async function createSession(session: DbSession): Promise<DbSession> {
         VALUES (${session.id}, ${session.user_id}, ${session.session_token}, ${session.expires_at}, ${session.ip_address}, ${session.user_agent}, ${session.created_at})
       `;
     } catch (e) {
-      console.warn("Neon session create error:", e);
+      console.error("Neon session creation failed:", e);
+      throw e;
     }
   }
 
@@ -278,7 +282,8 @@ export async function findSession(token: string): Promise<DbSession | null> {
       `) as DbSession[];
       if (rows && rows.length > 0) return rows[0];
     } catch (e) {
-      console.warn("Neon session find error:", e);
+      console.error("Neon session lookup failed:", e);
+      throw e;
     }
   }
 
@@ -297,7 +302,8 @@ export async function deleteSession(token: string): Promise<void> {
       const sql = neon(connectionString);
       await sql`DELETE FROM np_sessions WHERE session_token = ${token}`;
     } catch (e) {
-      console.warn("Neon session delete error:", e);
+      console.error("Neon session deletion failed:", e);
+      throw e;
     }
   }
   fallbackSessions.delete(token);
@@ -329,13 +335,52 @@ export async function logAuditEvent(log: Omit<DbAuditLog, "id" | "created_at">):
 }
 
 export async function getDbStatus() {
+  let counts = {
+    userCount: fallbackUsers.size,
+    profileCount: 0,
+    gameSessionCount: 0,
+    gameScoreCount: 0,
+    xpTransactionCount: 0,
+    tournamentCount: 0,
+    tournamentEntryCount: 0,
+    sessionCount: fallbackSessions.size,
+    auditLogCount: fallbackAuditLogs.length,
+  };
+
+  if (isNeonConfigured) {
+    await initTablesIfRemote();
+    const [databaseCounts] = await prisma.$queryRaw<
+      Array<{
+        userCount: number;
+        profileCount: number;
+        gameSessionCount: number;
+        gameScoreCount: number;
+        xpTransactionCount: number;
+        tournamentCount: number;
+        tournamentEntryCount: number;
+        sessionCount: number;
+        auditLogCount: number;
+      }>
+    >`
+      SELECT
+        (SELECT COUNT(*)::int FROM "User") AS "userCount",
+        (SELECT COUNT(*)::int FROM "PlayerProfile") AS "profileCount",
+        (SELECT COUNT(*)::int FROM "GameSession") AS "gameSessionCount",
+        (SELECT COUNT(*)::int FROM "GameScore") AS "gameScoreCount",
+        (SELECT COUNT(*)::int FROM "XPTransaction") AS "xpTransactionCount",
+        (SELECT COUNT(*)::int FROM "Tournament") AS "tournamentCount",
+        (SELECT COUNT(*)::int FROM "TournamentEntry") AS "tournamentEntryCount",
+        (SELECT COUNT(*)::int FROM np_sessions) AS "sessionCount",
+        (SELECT COUNT(*)::int FROM np_audit_logs) AS "auditLogCount"
+    `;
+    counts = databaseCounts;
+  }
+
   return {
     provider: "Neon PostgreSQL",
     isConfigured: isNeonConfigured,
     mode: isNeonConfigured ? "Neon Serverless Cluster" : "Neon Adapter Standby (Local Memory Synced)",
-    userCount: fallbackUsers.size,
-    sessionCount: fallbackSessions.size,
-    auditLogCount: fallbackAuditLogs.length,
+    ...counts,
     security: {
       pbkdf2Iterations: 100000,
       hashAlgorithm: "SHA-256",
