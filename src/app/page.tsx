@@ -342,7 +342,6 @@ export default function NaijaPlayApp() {
         {activeTab === "compete" && (
           <CompetitionArena
             ageZone={player.ageZone}
-            onAwardXP={handleAwardXP}
             onVerifiedXP={handleVerifiedXP}
             isAuthenticated={isAuthenticated}
             onRequestAuth={() => {

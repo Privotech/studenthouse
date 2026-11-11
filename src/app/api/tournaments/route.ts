@@ -92,21 +92,113 @@ async function ensureTournamentCatalog() {
 export async function GET(request: NextRequest) {
   try {
     const player = await getPlayerProfileFromRequest(request);
-    if (!player) {
-      return NextResponse.json({ error: "Sign in to load saved tournament registrations." }, { status: 401 });
-    }
-
     await ensureTournamentCatalog();
-    const entries = await prisma.tournamentEntry.findMany({
-      where: { playerProfileId: player.profile.id },
-      select: { tournament: { select: { slug: true } } },
-    });
+    const [entries, completed, results, catalogRows] = await Promise.all([
+      player
+        ? prisma.tournamentEntry.findMany({
+            where: { playerProfileId: player.profile.id },
+            select: { tournament: { select: { slug: true } } },
+          })
+        : Promise.resolve([]),
+      player
+        ? prisma.tournamentResult.findMany({
+            where: { playerProfileId: player.profile.id },
+            select: { tournament: { select: { slug: true } } },
+          })
+        : Promise.resolve([]),
+      prisma.tournamentResult.findMany({
+        where: { playerProfile: { profileVisibility: "PUBLIC_OPT_IN" } },
+        orderBy: [{ verifiedBestScore: "desc" }, { finalizedAt: "asc" }],
+        take: 100,
+        select: {
+          verifiedBestScore: true,
+          tournament: { select: { title: true } },
+          playerProfile: {
+            select: {
+              displayName: true,
+              ageZone: true,
+              schoolName: true,
+              stateCode: true,
+            },
+          },
+        },
+      }),
+      prisma.tournament.findMany({
+        orderBy: { startsAt: "asc" },
+        include: {
+          game: { select: { title: true } },
+          _count: { select: { entries: true } },
+        },
+      }),
+    ]);
+    const toTournamentId = (slug: string) =>
+      slug.startsWith("tourn-1-") ? "tourn-1" : slug;
     const joinedTournamentIds = entries.map(({ tournament }) =>
-      tournament.slug.startsWith("tourn-1-") ? "tourn-1" : tournament.slug,
+      toTournamentId(tournament.slug),
     );
+    const completedTournamentIds = completed.map(({ tournament }) =>
+      toTournamentId(tournament.slug),
+    );
+    const leaderboard = results.map(({ verifiedBestScore, tournament, playerProfile }, index) => {
+      const nameParts = playerProfile.displayName.trim().split(/\s+/);
+      return {
+        rank: index + 1,
+        name: playerProfile.displayName,
+        initials: nameParts.length > 1
+          ? `${nameParts[0]![0]}${nameParts[nameParts.length - 1]![0]}`.toUpperCase()
+          : playerProfile.displayName.slice(0, 2).toUpperCase(),
+        score: verifiedBestScore,
+        school: playerProfile.schoolName,
+        state: playerProfile.stateCode,
+        zone: playerProfile.ageZone,
+        badge: tournament.title,
+      };
+    });
+    const now = new Date();
+    const tournamentMap = new Map<string, {
+      id: string;
+      title: string;
+      game: string;
+      participantsCount: number;
+      startsAt: string;
+      status: "Live Now" | "Upcoming" | "Completed";
+      targetZone: "All Zones" | typeof ZONES[number];
+    }>();
+    for (const row of catalogRows) {
+      const id = toTournamentId(row.slug);
+      const existing = tournamentMap.get(id);
+      if (existing) {
+        existing.participantsCount += row._count.entries;
+        continue;
+      }
+
+      const startsAt = row.startsAt.toISOString();
+      const status = now >= row.endsAt
+        ? "Completed"
+        : now >= row.startsAt
+          ? "Live Now"
+          : "Upcoming";
+      tournamentMap.set(id, {
+        id,
+        title: row.title,
+        game: row.game.title,
+        participantsCount: row._count.entries,
+        startsAt,
+        status,
+        targetZone: id === "tourn-1" ? "All Zones" : row.targetAgeZone,
+      });
+    }
+    const tournaments = [...tournamentMap.values()].map((tournament) => ({
+      ...tournament,
+      startsIn: new Intl.DateTimeFormat("en-NG", {
+        dateStyle: "medium",
+        timeStyle: "short",
+        timeZone: "Africa/Lagos",
+      }).format(new Date(tournament.startsAt)),
+    }));
 
     return NextResponse.json(
-      { joinedTournamentIds },
+      { joinedTournamentIds, completedTournamentIds, leaderboard, tournaments },
       { headers: { "Cache-Control": "no-store, private" } },
     );
   } catch (error) {

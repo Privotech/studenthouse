@@ -3,48 +3,64 @@
 import React, { useEffect, useState } from "react";
 import {
   Trophy,
-  Users,
-  MapPin,
-  Calendar,
   Medal,
   CheckCircle2,
   Filter,
   Sparkles,
   X,
   ArrowRight,
-  HelpCircle,
-  XCircle,
 } from "lucide-react";
-import { AgeZone, Tournament } from "@/types/naijaplay";
-import { LEADERBOARD_ENTRIES, TOURNAMENTS } from "@/data/mockData";
+import { AgeZone, LeaderboardEntry, Tournament } from "@/types/naijaplay";
+import { TOURNAMENTS } from "@/data/mockData";
 import { sounds } from "@/lib/audio";
 
 interface CompetitionArenaProps {
   ageZone: AgeZone;
-  onAwardXP: (amount: number, reason: string) => void;
   onVerifiedXP: (amount: number, totalXP: number, level: number) => void;
   isAuthenticated: boolean;
   onRequestAuth: () => void;
 }
 
+interface QualifierQuestion {
+  discipline: string;
+  question: string;
+  options: string[];
+}
+
+interface TournamentCatalogRecord {
+  id: string;
+  title: string;
+  game: string;
+  participantsCount: number;
+  startsIn: string;
+  status: Tournament["status"];
+  targetZone: Tournament["targetZone"];
+}
+
 export const CompetitionArena: React.FC<CompetitionArenaProps> = ({
   ageZone,
-  onAwardXP,
   onVerifiedXP,
   isAuthenticated,
   onRequestAuth,
 }) => {
   const [filterType, setFilterType] = useState<"All" | "Individual" | "School vs School" | "State vs State">("All");
   const [joinedTournaments, setJoinedTournaments] = useState<string[]>([]);
+  const [completedTournamentIds, setCompletedTournamentIds] = useState<string[]>([]);
+  const [tournaments, setTournaments] = useState<Tournament[]>([]);
+  const [leaderboardEntries, setLeaderboardEntries] = useState<LeaderboardEntry[]>([]);
   const [registrationError, setRegistrationError] = useState<string | null>(null);
   const [registeringTournamentId, setRegisteringTournamentId] = useState<string | null>(null);
+  const [examQuestions, setExamQuestions] = useState<QualifierQuestion[]>([]);
+  const [examAnswers, setExamAnswers] = useState<number[]>([]);
+  const [examSessionId, setExamSessionId] = useState<string | null>(null);
+  const [examAwardedXP, setExamAwardedXP] = useState(0);
+  const [examError, setExamError] = useState<string | null>(null);
+  const [isSubmittingExam, setIsSubmittingExam] = useState(false);
+  const [tournamentDataVersion, setTournamentDataVersion] = useState(0);
   const [activeTab, setActiveTab] = useState<"tournaments" | "leaderboard" | "schools">("tournaments");
 
   useEffect(() => {
-    if (!isAuthenticated) {
-      setJoinedTournaments([]);
-      return;
-    }
+    let cancelled = false;
 
     fetch("/api/tournaments")
       .then(async (response) => {
@@ -52,18 +68,51 @@ export const CompetitionArena: React.FC<CompetitionArenaProps> = ({
         if (!response.ok) {
           throw new Error(result.error || "Could not load tournament registrations.");
         }
-        setJoinedTournaments(result.joinedTournamentIds);
+        if (!cancelled) {
+          if (isAuthenticated) {
+            setJoinedTournaments(result.joinedTournamentIds ?? []);
+            setCompletedTournamentIds(result.completedTournamentIds ?? []);
+          } else {
+            setJoinedTournaments([]);
+            setCompletedTournamentIds([]);
+          }
+          setRegistrationError(null);
+          const catalogById = new Map(
+            (result.tournaments as TournamentCatalogRecord[]).map((tournament) => [
+              tournament.id,
+              tournament,
+            ]),
+          );
+          setTournaments(
+            TOURNAMENTS.flatMap((template) => {
+              const record = catalogById.get(template.id);
+              return record ? [{ ...template, ...record }] : [];
+            }),
+          );
+          setLeaderboardEntries(result.leaderboard ?? []);
+        }
       })
       .catch((error: unknown) => {
-        setRegistrationError(
-          error instanceof Error ? error.message : "Could not load tournament registrations.",
-        );
+        if (!cancelled) {
+          if (!isAuthenticated) {
+            setJoinedTournaments([]);
+            setCompletedTournamentIds([]);
+          }
+          const message = error instanceof Error
+            ? error.message
+            : "Could not load tournament registrations.";
+          setRegistrationError(message);
+        }
       });
-  }, [isAuthenticated]);
 
-  const filteredTournaments = TOURNAMENTS.filter((t) => {
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthenticated, tournamentDataVersion]);
+
+  const filteredTournaments = tournaments.filter((t) => {
     if (filterType !== "All" && t.type !== filterType) return false;
-    return true;
+    return t.targetZone === "All Zones" || t.targetZone === ageZone;
   });
 
   const [activeExamTourney, setActiveExamTourney] = useState<Tournament | null>(null);
@@ -72,37 +121,6 @@ export const CompetitionArena: React.FC<CompetitionArenaProps> = ({
   const [examScore, setExamScore] = useState(0);
   const [examSubmitted, setExamSubmitted] = useState(false);
   const [examFinished, setExamFinished] = useState(false);
-
-  const OLYMPIAD_QUESTIONS = [
-    {
-      discipline: "Pure Mathematics",
-      question: "If f(x) = 3x² - 12x + 7, at what critical value of x does the local extremum occur?",
-      options: ["x = 2", "x = 4", "x = -2", "x = 0"],
-      correctIndex: 0,
-      rationale: "Differentiating f(x) yields f'(x) = 6x - 12. Setting f'(x) = 0 gives x = 2.",
-    },
-    {
-      discipline: "Computer Science",
-      question: "What is the worst-case time complexity of standard unrandomized Quickselect algorithm?",
-      options: ["O(n²)", "O(n log n)", "O(n)", "O(log n)"],
-      correctIndex: 0,
-      rationale: "When bad pivot partitions occur repeatedly, standard Quickselect degrades to O(n²), though average runtime is O(n).",
-    },
-    {
-      discipline: "Physical Science",
-      question: "A projectile is launched vertically at 19.6 m/s in standard gravity (g = 9.8 m/s²). Neglecting drag, what is its maximum elevation?",
-      options: ["19.6 meters", "39.2 meters", "9.8 meters", "14.7 meters"],
-      correctIndex: 0,
-      rationale: "Using v² = u² - 2gh at max height where v=0: h = (19.6)² / (2 * 9.8) = 19.6 meters.",
-    },
-    {
-      discipline: "Trade & Economics",
-      question: "Under the AfCFTA protocol on Trade in Goods, what percentage of tariff lines must State Parties liberalize during phase one?",
-      options: ["90% of tariff lines", "50% of tariff lines", "75% of tariff lines", "100% of tariff lines"],
-      correctIndex: 0,
-      rationale: "The AfCFTA Agreement mandates 90% tariff liberalization across commercial product lines during the initial phase.",
-    },
-  ];
 
   const handleJoin = async (tourney: Tournament) => {
     if (!isAuthenticated) {
@@ -140,14 +158,46 @@ export const CompetitionArena: React.FC<CompetitionArenaProps> = ({
     }
   };
 
-  const handleStartExam = (tourney: Tournament) => {
-    sounds.playClick();
-    setActiveExamTourney(tourney);
-    setExamQIndex(0);
-    setExamSelectedOpt(null);
-    setExamScore(0);
-    setExamSubmitted(false);
-    setExamFinished(false);
+  const handleStartExam = async (tourney: Tournament) => {
+    if (!isAuthenticated) {
+      onRequestAuth();
+      return;
+    }
+
+    setRegisteringTournamentId(tourney.id);
+    setRegistrationError(null);
+    setExamError(null);
+    try {
+      const response = await fetch("/api/tournaments/qualifier", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "start", tournamentId: tourney.id }),
+      });
+      const result = await response.json();
+      if (response.status === 401) {
+        onRequestAuth();
+        return;
+      }
+      if (!response.ok) {
+        throw new Error(result.error || "Could not start this qualifier.");
+      }
+
+      sounds.playClick();
+      setExamSessionId(result.sessionId);
+      setExamQuestions(result.questions);
+      setExamAnswers([]);
+      setActiveExamTourney(tourney);
+      setExamQIndex(0);
+      setExamSelectedOpt(null);
+      setExamScore(0);
+      setExamAwardedXP(0);
+      setExamSubmitted(false);
+      setExamFinished(false);
+    } catch (error) {
+      setRegistrationError(error instanceof Error ? error.message : "Could not start this qualifier.");
+    } finally {
+      setRegisteringTournamentId(null);
+    }
   };
 
 
@@ -159,27 +209,59 @@ export const CompetitionArena: React.FC<CompetitionArenaProps> = ({
 
   const handleSubmitExamOption = () => {
     if (examSelectedOpt === null || examSubmitted) return;
-    const isCorrect = examSelectedOpt === OLYMPIAD_QUESTIONS[examQIndex]!.correctIndex;
-    if (isCorrect) {
-      sounds.playCorrect();
-      setExamScore((prev) => prev + 1);
-    } else {
-      sounds.playWrong();
-    }
+    sounds.playClick();
+    setExamAnswers((current) => {
+      const next = [...current];
+      next[examQIndex] = examSelectedOpt;
+      return next;
+    });
     setExamSubmitted(true);
   };
 
-  const handleNextExamQuestion = () => {
-    if (examQIndex < OLYMPIAD_QUESTIONS.length - 1) {
+  const handleNextExamQuestion = async () => {
+    if (examQIndex < examQuestions.length - 1) {
       sounds.playClick();
       setExamQIndex((prev) => prev + 1);
       setExamSelectedOpt(null);
       setExamSubmitted(false);
-    } else {
+      return;
+    }
+
+    if (!examSessionId || examAnswers.length !== examQuestions.length) {
+      setExamError("Your answers could not be submitted. Restart the qualifier and try again.");
+      return;
+    }
+
+    setIsSubmittingExam(true);
+    setExamError(null);
+    try {
+      const response = await fetch("/api/tournaments/qualifier", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "complete", sessionId: examSessionId, answers: examAnswers }),
+      });
+      const result = await response.json();
+      if (response.status === 401) {
+        onRequestAuth();
+        return;
+      }
+      if (!response.ok) {
+        throw new Error(result.error || "Could not save your qualifier result.");
+      }
+
       sounds.playTrophy();
+      setExamScore(result.correctAnswers);
+      setExamAwardedXP(result.awardedXP);
       setExamFinished(true);
-      const earnedXP = 120 + examScore * 25;
-      onAwardXP(earnedXP, `Completed ${activeExamTourney?.title} Qualifier`);
+      if (activeExamTourney) {
+        setCompletedTournamentIds((current) => [...new Set([...current, activeExamTourney.id])]);
+      }
+      onVerifiedXP(result.awardedXP, result.totalXP, result.level);
+      setTournamentDataVersion((version) => version + 1);
+    } catch (error) {
+      setExamError(error instanceof Error ? error.message : "Could not save your qualifier result.");
+    } finally {
+      setIsSubmittingExam(false);
     }
   };
 
@@ -342,13 +424,29 @@ export const CompetitionArena: React.FC<CompetitionArenaProps> = ({
                       </button>
 
                       {isJoined && (
-                        <button
-                          onClick={() => handleStartExam(tourney)}
-                          className="py-2.5 px-4 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-950/60 transition-colors flex items-center gap-1.5"
-                        >
-                          <Medal className="w-4 h-4 text-emerald-200" />
-                          <span>Start Qualifier</span>
-                        </button>
+                        completedTournamentIds.includes(tourney.id) ? (
+                          <span className="py-2.5 px-4 rounded-xl text-xs font-bold bg-slate-950 text-emerald-300 border border-emerald-800/60 flex items-center gap-1.5">
+                            <CheckCircle2 className="w-4 h-4" />
+                            <span>Qualifier completed</span>
+                          </span>
+                        ) : tourney.status === "Upcoming" ? (
+                          <span className="py-2.5 px-4 rounded-xl text-xs font-bold bg-slate-950 text-slate-400 border border-slate-800">
+                            Opens {tourney.startsIn}
+                          </span>
+                        ) : tourney.status === "Completed" ? (
+                          <span className="py-2.5 px-4 rounded-xl text-xs font-bold bg-slate-950 text-slate-400 border border-slate-800">
+                            Tournament closed
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => void handleStartExam(tourney)}
+                            disabled={registeringTournamentId === tourney.id}
+                            className="py-2.5 px-4 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-950/60 transition-colors flex items-center gap-1.5 disabled:opacity-60"
+                          >
+                            <Medal className="w-4 h-4 text-emerald-200" />
+                            <span>{registeringTournamentId === tourney.id ? "Starting..." : "Start Qualifier"}</span>
+                          </button>
+                        )
                       )}
                     </div>
                   </div>
@@ -367,12 +465,12 @@ export const CompetitionArena: React.FC<CompetitionArenaProps> = ({
                 All-Nigeria Verified Academic Rankings
               </h3>
               <p className="text-xs text-slate-400">
-                Live rankings calculated server-authoritatively across verified examination results.
+                Rankings from saved qualifier results. Only scholars who opted into public profile visibility appear here.
               </p>
             </div>
             <div className="flex items-center gap-2 text-xs font-semibold text-emerald-400 bg-emerald-950/60 border border-emerald-800 px-3 py-1 rounded-lg font-mono">
               <Sparkles className="w-3.5 h-3.5" />
-              <span>Anti-Cheat Verified</span>
+              <span>Database-backed results</span>
             </div>
           </div>
 
@@ -389,12 +487,10 @@ export const CompetitionArena: React.FC<CompetitionArenaProps> = ({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60 font-mono">
-                {LEADERBOARD_ENTRIES.map((player) => (
+                {leaderboardEntries.map((player) => (
                   <tr
-                    key={player.rank}
-                    className={`hover:bg-slate-800/40 transition-colors ${
-                      player.name.includes("Chidi") ? "bg-emerald-950/30 text-emerald-200" : ""
-                    }`}
+                    key={`${player.rank}-${player.name}`}
+                    className="transition-colors hover:bg-slate-800/40"
                   >
                     <td className="py-3 px-3">
                       {player.rank === 1 ? (
@@ -437,6 +533,13 @@ export const CompetitionArena: React.FC<CompetitionArenaProps> = ({
                     </td>
                   </tr>
                 ))}
+                {leaderboardEntries.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="py-8 text-center text-slate-400">
+                      No public qualifier results yet.
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
@@ -445,51 +548,11 @@ export const CompetitionArena: React.FC<CompetitionArenaProps> = ({
 
       {/* SCHOOL DERBY TAB */}
       {activeTab === "schools" && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-          <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-5 space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="rounded-full bg-emerald-950 px-2.5 py-0.5 text-[10px] font-mono font-bold text-emerald-300 border border-emerald-800">
-                1st Place School
-              </span>
-              <span className="text-xs font-mono font-bold text-emerald-400">42,850 pts</span>
-            </div>
-            <h3 className="font-display text-lg font-bold text-white">
-              King&apos;s College Lagos
-            </h3>
-            <p className="text-xs text-slate-300">
-              Top Categories: Calculus & Computer Science. 240 active scholars enrolled.
-            </p>
-          </div>
-
-          <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-5 space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="rounded-full bg-slate-800 px-2.5 py-0.5 text-[10px] font-mono font-bold text-slate-300 border border-slate-700">
-                2nd Place School
-              </span>
-              <span className="text-xs font-mono font-bold text-emerald-400">38,120 pts</span>
-            </div>
-            <h3 className="font-display text-lg font-bold text-white">
-              Queen&apos;s College Yaba
-            </h3>
-            <p className="text-xs text-slate-300">
-              Top Categories: Physical Sciences & English Rhetoric. 210 active scholars enrolled.
-            </p>
-          </div>
-
-          <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-5 space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="rounded-full bg-slate-800 px-2.5 py-0.5 text-[10px] font-mono font-bold text-slate-300 border border-slate-700">
-                3rd Place School
-              </span>
-              <span className="text-xs font-mono font-bold text-emerald-400">35,900 pts</span>
-            </div>
-            <h3 className="font-display text-lg font-bold text-white">
-              Corona Secondary School
-            </h3>
-            <p className="text-xs text-slate-300">
-              Top Categories: Macroeconomics & Logic. 185 active scholars enrolled.
-            </p>
-          </div>
+        <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-6 text-center">
+          <h3 className="font-display text-lg font-bold text-white">School Derby Standings</h3>
+          <p className="mt-2 text-sm text-slate-400">
+            Verified school standings will appear after tournament results are linked to verified school records.
+          </p>
         </div>
       )}
 
@@ -528,17 +591,17 @@ export const CompetitionArena: React.FC<CompetitionArenaProps> = ({
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between text-xs font-mono text-slate-400">
                     <span>
-                      Question {examQIndex + 1} of {OLYMPIAD_QUESTIONS.length}
+                      Question {examQIndex + 1} of {examQuestions.length}
                     </span>
                     <span className="text-emerald-400 font-semibold">
-                      Discipline: {OLYMPIAD_QUESTIONS[examQIndex]?.discipline}
+                      Discipline: {examQuestions[examQIndex]?.discipline}
                     </span>
                   </div>
                   <div className="h-1.5 w-full rounded-full bg-slate-950 overflow-hidden border border-slate-800">
                     <div
                       className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-green-400 transition-all duration-300"
                       style={{
-                        width: `${Math.round(((examQIndex + 1) / OLYMPIAD_QUESTIONS.length) * 100)}%`,
+                        width: `${Math.round(((examQIndex + 1) / examQuestions.length) * 100)}%`,
                       }}
                     />
                   </div>
@@ -547,26 +610,16 @@ export const CompetitionArena: React.FC<CompetitionArenaProps> = ({
                 {/* Question */}
                 <div className="rounded-xl border border-slate-800 bg-slate-950 p-4">
                   <p className="text-sm font-semibold text-white leading-relaxed">
-                    {OLYMPIAD_QUESTIONS[examQIndex]?.question}
+                    {examQuestions[examQIndex]?.question}
                   </p>
                 </div>
 
                 {/* Options */}
                 <div className="space-y-2.5">
-                  {OLYMPIAD_QUESTIONS[examQIndex]?.options.map((opt, i) => {
+                  {examQuestions[examQIndex]?.options.map((opt, i) => {
                     const isSelected = examSelectedOpt === i;
-                    const isCorrect = i === OLYMPIAD_QUESTIONS[examQIndex]?.correctIndex;
-
                     let btnClass = "border-slate-800 bg-slate-950 hover:border-slate-700 text-slate-200";
-                    if (examSubmitted) {
-                      if (isCorrect) {
-                        btnClass = "border-emerald-500 bg-emerald-950/60 text-emerald-200 font-semibold";
-                      } else if (isSelected) {
-                        btnClass = "border-rose-500 bg-rose-950/60 text-rose-200";
-                      } else {
-                        btnClass = "border-slate-800 bg-slate-950/40 text-slate-500";
-                      }
-                    } else if (isSelected) {
+                    if (isSelected) {
                       btnClass = "border-emerald-500 bg-slate-800 text-white font-semibold ring-1 ring-emerald-500";
                     }
 
@@ -583,25 +636,15 @@ export const CompetitionArena: React.FC<CompetitionArenaProps> = ({
                           </span>
                           <span>{opt}</span>
                         </div>
-                        {examSubmitted && isCorrect && (
-                          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                        )}
-                        {examSubmitted && isSelected && !isCorrect && (
-                          <XCircle className="w-4 h-4 text-rose-400 shrink-0" />
-                        )}
                       </button>
                     );
                   })}
                 </div>
 
-                {/* Explanation on submission */}
-                {examSubmitted && (
-                  <div className="rounded-xl border border-slate-800 bg-slate-950/90 p-3.5 text-xs text-slate-300 space-y-1">
-                    <span className="font-mono font-bold text-emerald-400 block">
-                      Academic Rationale:
-                    </span>
-                    <p>{OLYMPIAD_QUESTIONS[examQIndex]?.rationale}</p>
-                  </div>
+                {examError && (
+                  <p role="alert" className="rounded-xl border border-red-900/70 bg-red-950/30 p-3 text-sm text-red-300">
+                    {examError}
+                  </p>
                 )}
 
                 {/* Actions */}
@@ -617,12 +660,17 @@ export const CompetitionArena: React.FC<CompetitionArenaProps> = ({
                   ) : (
                     <button
                       onClick={handleNextExamQuestion}
-                      className="flex items-center gap-1.5 rounded-xl bg-emerald-600 px-5 py-2.5 text-xs font-bold text-white hover:bg-emerald-500 transition-colors shadow-lg shadow-emerald-950"
+                      disabled={isSubmittingExam}
+                      className="flex items-center gap-1.5 rounded-xl bg-emerald-600 px-5 py-2.5 text-xs font-bold text-white hover:bg-emerald-500 transition-colors shadow-lg shadow-emerald-950 disabled:opacity-60"
                     >
                       <span>
-                        {examQIndex < OLYMPIAD_QUESTIONS.length - 1 ? "Next Problem" : "Finish Qualifier"}
+                        {isSubmittingExam
+                          ? "Saving result..."
+                          : examQIndex < examQuestions.length - 1
+                            ? "Next Problem"
+                            : "Finish Qualifier"}
                       </span>
-                      <ArrowRight className="w-4 h-4" />
+                      {!isSubmittingExam && <ArrowRight className="w-4 h-4" />}
                     </button>
                   )}
                 </div>
@@ -639,7 +687,7 @@ export const CompetitionArena: React.FC<CompetitionArenaProps> = ({
                     Qualifier Round Completed
                   </h4>
                   <p className="text-xs text-slate-300">
-                    Your score has been registered server-authoritatively to the Olympiad Derby standings.
+                    Your verified score, result, and XP award have been saved to your account.
                   </p>
                 </div>
 
@@ -647,13 +695,13 @@ export const CompetitionArena: React.FC<CompetitionArenaProps> = ({
                   <div className="rounded-xl border border-slate-800 bg-slate-950 p-3.5">
                     <span className="text-[11px] text-slate-400 block font-mono">Accuracy</span>
                     <span className="font-mono text-xl font-bold text-emerald-400">
-                      {examScore} / {OLYMPIAD_QUESTIONS.length} Correct
+                      {examScore} / {examQuestions.length} Correct
                     </span>
                   </div>
                   <div className="rounded-xl border border-slate-800 bg-slate-950 p-3.5">
                     <span className="text-[11px] text-slate-400 block font-mono">Merit Conferred</span>
                     <span className="font-mono text-xl font-bold text-amber-400">
-                      +{120 + examScore * 25} XP
+                      +{examAwardedXP} XP
                     </span>
                   </div>
                 </div>
