@@ -916,7 +916,7 @@ export const LearnAndGrow: React.FC<LearnAndGrowProps> = ({
                 This academic credential formally certifies that
               </p>
               <h3 className="font-display text-2xl font-extrabold text-emerald-300">
-                Chidi Okonkwo
+                Verified Scholar
               </h3>
               <p className="text-xs text-slate-400 max-w-md mx-auto">
                 has successfully fulfilled all academic curriculum requirements and achieved a score of{" "}

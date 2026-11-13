@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import {
@@ -176,7 +177,7 @@ export async function POST(req: NextRequest) {
     // Cryptographic PBKDF2 Hashing
     const { hash, salt, iterations } = await hashPassword(password);
 
-    const userId = `usr_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+    const userId = randomUUID();
     const nowIso = new Date().toISOString();
 
     const newUser: DbUser = {

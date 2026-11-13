@@ -63,13 +63,13 @@ export const RoadmapModal: React.FC<RoadmapModalProps> = ({
           <div className="space-y-1">
             <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-emerald-400">
               <Map className="w-4 h-4" />
-              <span>Official Product Blueprint · Nigeria to Africa</span>
+              <span>3-in-1 Ecosystem Blueprint · Nigeria to Africa</span>
             </div>
             <h2 className="font-display text-2xl sm:text-3xl font-extrabold text-white">
-              NaijaPlay — Full Product Concept & Roadmap
+              NaijaPlay Ecosystem — Architecture & Roadmap
             </h2>
             <p className="text-xs text-slate-400">
-              Play. Learn. Compete. Become. · Comprehensive 14-Section Product Specification
+              NaijaPlay · SkillQuest · Talent Arena · One connected platform. Three experiences. Shared progress.
             </p>
           </div>
           <button
@@ -182,19 +182,19 @@ export const RoadmapModal: React.FC<RoadmapModalProps> = ({
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-emerald-950/30 border border-emerald-900/50 p-4 rounded-2xl">
               <div>
                 <span className="text-xs font-bold text-emerald-400 uppercase tracking-wider block">
-                  Solo-Developer Execution Timeline: 16–24 Weeks
+                  6-Release 3-in-1 Delivery Strategy
                 </span>
                 <p className="text-xs text-slate-300 mt-0.5">
-                  Structured 12-phase delivery roadmap with explicit deliverables, acceptance tests, and zero discarded work.
+                  Shared Foundation, NaijaPlay, SkillQuest, Talent Arena, Multi-Tenant Commercial Readiness, and Scale Validation.
                 </p>
               </div>
               <span className="self-start sm:self-auto rounded-full bg-emerald-900/80 px-3 py-1 text-xs font-mono font-bold text-emerald-300 border border-emerald-700">
-                Phase 1 & 2 Live in Preview
+                Releases 1–5 Active in Workspace
               </span>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {ROADMAP_PHASES.map((p, idx) => (
+              {ROADMAP_PHASES.map((p) => (
                 <div
                   key={p.phase}
                   className={`rounded-2xl border p-4.5 space-y-2.5 transition-all ${
@@ -214,7 +214,7 @@ export const RoadmapModal: React.FC<RoadmapModalProps> = ({
                         p.status.includes("Completed") || p.status.includes("Implemented")
                           ? "bg-emerald-950 text-emerald-300 border-emerald-700"
                           : p.status.includes("Active")
-                          ? "bg-amber-950 text-amber-300 border-amber-700 animate-pulse"
+                          ? "bg-amber-950 text-amber-300 border-amber-700"
                           : "bg-slate-900 text-slate-400 border-slate-700"
                       }`}
                     >
@@ -271,11 +271,11 @@ export const RoadmapModal: React.FC<RoadmapModalProps> = ({
                   Application Engines
                 </h4>
                 <ul className="text-xs text-slate-300 space-y-1 list-disc list-inside">
-                  <li>Age-aware Authentication & RBAC/ABAC</li>
-                  <li>Phaser.js Browser Game Engine</li>
-                  <li>Server-Authoritative Score Verifier</li>
-                  <li>Append-Only XP Ledger Engine</li>
-                  <li>Curriculum & Quiz Engine</li>
+                  <li>Shared Identity, Scoped RBAC & Multi-Tenant Isolation</li>
+                  <li>NaijaPlay Game Sessions & Server Score Verifier</li>
+                  <li>SkillQuest Paths, Practical Labs & Instructor Tools</li>
+                  <li>Talent Arena Portfolios & Multi-Judge Scorecards</li>
+                  <li>Append-Only XP Ledger & Commercial Entitlements</li>
                 </ul>
               </div>
 
@@ -287,10 +287,10 @@ export const RoadmapModal: React.FC<RoadmapModalProps> = ({
                   Persistent Storage
                 </h4>
                 <ul className="text-xs text-slate-300 space-y-1 list-disc list-inside">
-                  <li>PostgreSQL Database with Prisma ORM</li>
-                  <li>Redis for session caching & rate limits</li>
-                  <li>Socket.IO on dedicated Node.js host</li>
-                  <li>Sentry error logging & PostHog telemetry</li>
+                  <li>Neon PostgreSQL Database with Prisma ORM</li>
+                  <li>Multi-tenant Organizations & Subscription Tables</li>
+                  <li>Idempotency & Concurrency-Safe Transactions</li>
+                  <li>Private `/xadmin` Governance & Audit Trail</li>
                 </ul>
               </div>
             </div>

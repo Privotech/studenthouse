@@ -4,12 +4,12 @@ import React from "react";
 import {
   Gamepad2,
   Trophy,
-  BookOpen,
+  GraduationCap,
   Palette,
   Users,
   User,
   LayoutDashboard,
-  Shield,
+  Sparkles,
 } from "lucide-react";
 import { NavTab } from "@/types/naijaplay";
 import { sounds } from "@/lib/audio";
@@ -20,14 +20,14 @@ interface BottomNavProps {
 }
 
 const TABS: { id: NavTab; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
-  { id: "home", label: "Home", icon: LayoutDashboard },
-  { id: "games", label: "Games", icon: Gamepad2 },
+  { id: "home", label: "Hub", icon: LayoutDashboard },
+  { id: "games", label: "NaijaPlay", icon: Gamepad2 },
+  { id: "learn", label: "SkillQuest", icon: GraduationCap },
+  { id: "talent", label: "Talent", icon: Sparkles },
   { id: "compete", label: "Compete", icon: Trophy },
-  { id: "learn", label: "Learn", icon: BookOpen },
   { id: "studio", label: "Studio", icon: Palette },
   { id: "clubs", label: "Clubs", icon: Users },
   { id: "profile", label: "Profile", icon: User },
-  { id: "portals", label: "Portals", icon: Shield },
 ];
 
 export const BottomNav: React.FC<BottomNavProps> = ({ activeTab, onTabChange }) => {

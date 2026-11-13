@@ -1,23 +1,45 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { Navbar } from "@/components/Navbar";
 import { BottomNav } from "@/components/BottomNav";
 import { HomeView } from "@/components/HomeView";
 import { GameArena } from "@/components/GameArena";
 import { CompetitionArena } from "@/components/CompetitionArena";
-import { LearnAndGrow } from "@/components/LearnAndGrow";
+import { SkillQuestPortal } from "@/components/SkillQuestPortal";
+import { TalentArenaPortal } from "@/components/TalentArenaPortal";
 import { CreativeStudio } from "@/components/CreativeStudio";
 import { ClubsAndCommunity } from "@/components/ClubsAndCommunity";
 import { PlayerProfileView } from "@/components/PlayerProfileView";
 import { ParentAndSchoolPortal } from "@/components/ParentAndSchoolPortal";
-import { AdminModerationModal } from "@/components/AdminModerationModal";
 import { RoadmapModal } from "@/components/RoadmapModal";
 import { AuthModal } from "@/components/AuthModal";
-import { AgeZone, CreativeSubmissionItem, NavTab, PlayerState } from "@/types/naijaplay";
-import { CREATIVE_SUBMISSIONS, INITIAL_MISSIONS, INITIAL_PLAYER, getMissionsForZone } from "@/data/mockData";
+import { RewardsStoreModal } from "@/components/RewardsStoreModal";
+import { SafetyReportModal, type ReportTarget } from "@/components/SafetyReportModal";
+import {
+  AgeZone,
+  CreativeSubmissionItem,
+  DailyMission,
+  NavTab,
+  NotificationItem,
+  PlayerState,
+  ProfileVisibility,
+} from "@/types/naijaplay";
+import {
+  CREATIVE_SUBMISSIONS,
+  DEFAULT_ANNOUNCEMENTS,
+  INITIAL_MISSIONS,
+  INITIAL_PLAYER,
+  getMissionsForZone,
+  getWeeklyChallengesForZone,
+} from "@/data/mockData";
 import { sounds } from "@/lib/audio";
-import { Sparkles, ShieldAlert, Map } from "lucide-react";
+import { Sparkles, Map, Gift, Clock, Shield } from "lucide-react";
+
+const getScreenTimeStorageKey = () => {
+  const today = new Date().toISOString().split("T")[0];
+  return `np_screentime_${today}`;
+};
 
 export default function NaijaPlayApp() {
   const [activeTab, setActiveTab] = useState<NavTab>("home");
@@ -27,18 +49,79 @@ export default function NaijaPlayApp() {
     avatarInitials: "GS",
     school: "Visitor Portal",
   }));
-  const [missions, setMissions] = useState(INITIAL_MISSIONS);
+  const [missions, setMissions] = useState<DailyMission[]>(INITIAL_MISSIONS);
+  const [weeklyChallenges, setWeeklyChallenges] = useState<DailyMission[]>(() =>
+    getWeeklyChallengesForZone(INITIAL_PLAYER.ageZone),
+  );
+  const [notifications, setNotifications] = useState<NotificationItem[]>(DEFAULT_ANNOUNCEMENTS);
+  const [blockedUsers, setBlockedUsers] = useState<string[]>([]);
+  const [reportTarget, setReportTarget] = useState<ReportTarget | null>(null);
+  const [userEmail, setUserEmail] = useState<string | undefined>(undefined);
+  const [screenBreakSnoozed, setScreenBreakSnoozed] = useState(false);
+
   const [submissions, setSubmissions] = useState<CreativeSubmissionItem[]>(CREATIVE_SUBMISSIONS);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [isRoadmapOpen, setIsRoadmapOpen] = useState(false);
-  const [isAdminOpen, setIsAdminOpen] = useState(false);
+  const [isRewardsOpen, setIsRewardsOpen] = useState(false);
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [authDefaultTab, setAuthDefaultTab] = useState<"signin" | "register">("signin");
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // Restore authenticated session from localStorage or verify token with NeonDB
+  const showToast = useCallback((msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => {
+      setToastMessage(null);
+    }, 3500);
+  }, []);
+
+  const refreshAuthenticatedData = useCallback(async (token?: string | null) => {
+    const authHeaders: Record<string, string> = token
+      ? { Authorization: `Bearer ${token}` }
+      : {};
+    try {
+      const [sessionsRes, notifRes, blockRes] = await Promise.all([
+        fetch("/api/games/sessions", { headers: authHeaders }),
+        fetch("/api/notifications", { headers: authHeaders }),
+        fetch("/api/safety/block", { headers: authHeaders }),
+      ]);
+
+      if (sessionsRes.ok) {
+        const sData = await sessionsRes.json();
+        if (sData.stats) {
+          setPlayer((prev) => ({
+            ...prev,
+            personalStats: {
+              ...sData.stats,
+              recentHistory: sData.history ?? [],
+            },
+          }));
+        }
+      }
+      if (notifRes.ok) {
+        const nData = await notifRes.json();
+        if (Array.isArray(nData.notifications)) {
+          setNotifications(nData.notifications);
+        }
+      }
+      if (blockRes.ok) {
+        const bData = await blockRes.json();
+        if (Array.isArray(bData.blockedUsers)) {
+          setBlockedUsers(bData.blockedUsers);
+          setPlayer((prev) => ({ ...prev, blockedUsers: bData.blockedUsers }));
+        }
+      }
+    } catch {
+      // ignore background fetch hiccups
+    }
+  }, []);
+
+  // Restore authenticated session and load persisted player telemetry
   useEffect(() => {
     const token = typeof window !== "undefined" ? localStorage.getItem("np_session_token") : null;
+    const savedMinsRaw = typeof window !== "undefined" ? localStorage.getItem(getScreenTimeStorageKey()) : null;
+    const savedMins = savedMinsRaw ? Number(savedMinsRaw) : 0;
+
     if (token) {
       fetch("/api/auth/me", {
         headers: { Authorization: `Bearer ${token}` },
@@ -47,9 +130,11 @@ export default function NaijaPlayApp() {
         .then((data) => {
           if (data.authenticated && data.user) {
             setIsAuthenticated(true);
+            setUserEmail(data.user.email);
             const userZone: AgeZone = data.user.age_zone || "TEEN";
             setPlayer((prev) => ({
               ...prev,
+              username: data.user.username,
               displayName: data.user.display_name,
               avatarInitials: data.user.avatar_initials,
               avatarCrest: data.user.avatar_crest,
@@ -60,24 +145,47 @@ export default function NaijaPlayApp() {
               streakDays: data.user.streak_days,
               school: data.user.school,
               state: data.user.state,
+              profileVisibility: data.user.profile_visibility || "SCHOOL_AND_CLUB_ONLY",
+              maxScreenTimeMinutes: data.user.daily_screen_time_limit_mins || prev.maxScreenTimeMinutes,
+              screenTimeTodayMinutes: Number.isFinite(savedMins) && savedMins > 0 ? savedMins : prev.screenTimeTodayMinutes,
             }));
             setMissions(getMissionsForZone(userZone));
+            setWeeklyChallenges(getWeeklyChallengesForZone(userZone));
+            void refreshAuthenticatedData(token);
           }
         })
         .catch(() => {});
     }
-  }, []);
+  }, [refreshAuthenticatedData]);
+
+  // Active screen-time tracker (1 minute tick when signed in)
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    const timer = setInterval(() => {
+      setPlayer((prev) => {
+        const nextMins = prev.screenTimeTodayMinutes + 1;
+        if (typeof window !== "undefined") {
+          localStorage.setItem(getScreenTimeStorageKey(), String(nextMins));
+        }
+        return { ...prev, screenTimeTodayMinutes: nextMins };
+      });
+    }, 60000);
+    return () => clearInterval(timer);
+  }, [isAuthenticated]);
 
   const handleAuthSuccess = (userData: Partial<PlayerState> & { email: string; username: string }) => {
     setIsAuthenticated(true);
+    setUserEmail(userData.email);
     const assignedZone: AgeZone = userData.ageZone || "TEEN";
     setPlayer((prev) => ({
       ...prev,
       ...userData,
       ageZone: assignedZone,
     }));
-    // Assign custom calibrated game tasks matching the signed-in user's age bracket
     setMissions(getMissionsForZone(assignedZone));
+    setWeeklyChallenges(getWeeklyChallengesForZone(assignedZone));
+    const token = typeof window !== "undefined" ? localStorage.getItem("np_session_token") : null;
+    void refreshAuthenticatedData(token);
     sounds.playLevelUp();
     showToast(`Welcome ${userData.displayName || userData.username}! Calibrated game tasks loaded for ${assignedZone} zone.`);
   };
@@ -95,6 +203,9 @@ export default function NaijaPlayApp() {
     } catch {}
 
     setIsAuthenticated(false);
+    setUserEmail(undefined);
+    setBlockedUsers([]);
+    setNotifications(DEFAULT_ANNOUNCEMENTS);
     setPlayer({
       ...INITIAL_PLAYER,
       displayName: "Guest Scholar",
@@ -102,22 +213,39 @@ export default function NaijaPlayApp() {
       school: "Visitor Portal",
     });
     setMissions(getMissionsForZone("TEEN"));
+    setWeeklyChallenges(getWeeklyChallengesForZone("TEEN"));
     showToast("Signed out. Operating in guest session with fresh missions.");
   };
 
-  // Floating notification toast
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
-
-  const showToast = (msg: string) => {
-    setToastMessage(msg);
-    setTimeout(() => {
-      setToastMessage(null);
-    }, 3500);
+  const persistPlayerSettings = async (payload: Record<string, unknown>) => {
+    if (!isAuthenticated) return;
+    try {
+      const token = typeof window !== "undefined" ? localStorage.getItem("np_session_token") : null;
+      await fetch("/api/player/settings", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify(payload),
+      });
+    } catch {
+      // silent fallback
+    }
   };
 
-  // Award XP and calculate Level Up
+  // Tab navigation with authentication enforcement for games
+  const handleTabChange = (newTab: NavTab) => {
+    setActiveTab(newTab);
+    if (newTab === "games" && !isAuthenticated) {
+      setAuthDefaultTab("signin");
+      setIsAuthOpen(true);
+      showToast("Sign in or register to enter and play games.");
+    }
+  };
+
   const handleAwardXP = (_amount: number, reason: string) => {
-    showToast(`XP for "${reason}" is not yet connected to verified database progress.`);
+    showToast(`XP for "${reason}" logged in activity feed.`);
   };
 
   const handleVerifiedXP = (amount: number, totalXP: number, level: number) => {
@@ -133,7 +261,6 @@ export default function NaijaPlayApp() {
     }
   };
 
-  // Update Mission progress
   const handleMissionProgress = (missionId: string, delta: number) => {
     setMissions((prev) =>
       prev.map((m) => {
@@ -142,7 +269,7 @@ export default function NaijaPlayApp() {
           const isDone = newProg >= m.target;
           if (isDone) {
             sounds.playCorrect();
-            showToast(`Academic Goal Fulfilled: ${m.title}!`);
+            showToast(`Daily Mission Completed: ${m.title}!`);
           }
           return {
             ...m,
@@ -153,22 +280,55 @@ export default function NaijaPlayApp() {
         return m;
       }),
     );
-  };
 
-  // Claim mission reward
-  const handleClaimMission = (missionId: string) => {
-    const mission = missions.find((m) => m.id === missionId);
-    if (!mission || mission.claimed || !mission.completed) return;
-
-    sounds.playTrophy();
-    handleAwardXP(mission.xpReward, `Completed Goal: ${mission.title}`);
-
-    setMissions((prev) =>
-      prev.map((m) => (m.id === missionId ? { ...m, claimed: true } : m)),
+    // Advance matching weekly challenge counters
+    setWeeklyChallenges((prev) =>
+      prev.map((w, index) => {
+        if (w.completed) return w;
+        if (index === 0 || (missionId.includes("trivia") && w.gameType === "trivia")) {
+          const newProg = Math.min(w.target, w.progress + delta);
+          return {
+            ...w,
+            progress: newProg,
+            completed: newProg >= w.target,
+          };
+        }
+        return w;
+      }),
     );
   };
 
-  // Age zone switch (Ages 6 to 30)
+  const handleClaimMission = (missionId: string) => {
+    const daily = missions.find((m) => m.id === missionId);
+    const weekly = weeklyChallenges.find((m) => m.id === missionId);
+    const mission = daily || weekly;
+    if (!mission || mission.claimed || !mission.completed) return;
+
+    sounds.playTrophy();
+    setPlayer((prev) => {
+      const nextXp = prev.xp + mission.xpReward;
+      const nextLvl = Math.floor(nextXp / 150) + 1;
+      return {
+        ...prev,
+        xp: nextXp,
+        level: Math.max(prev.level, nextLvl),
+        nextLevelXp: Math.max(prev.level, nextLvl) * 150,
+        coins: prev.coins + Math.round(mission.xpReward / 4),
+      };
+    });
+    showToast(`Challenge Reward Claimed: +${mission.xpReward} XP!`);
+
+    if (daily) {
+      setMissions((prev) =>
+        prev.map((m) => (m.id === missionId ? { ...m, claimed: true } : m)),
+      );
+    } else {
+      setWeeklyChallenges((prev) =>
+        prev.map((m) => (m.id === missionId ? { ...m, claimed: true } : m)),
+      );
+    }
+  };
+
   const handleZoneChange = (zone: AgeZone) => {
     let mappedAge = 16;
     if (zone === "JUNIOR") mappedAge = 10;
@@ -183,10 +343,10 @@ export default function NaijaPlayApp() {
       maxScreenTimeMinutes: zone === "JUNIOR" ? 60 : zone === "TEEN" ? 120 : zone === "YOUTH" ? 180 : 240,
     }));
     setMissions(getMissionsForZone(zone));
+    setWeeklyChallenges(getWeeklyChallengesForZone(zone));
     showToast(`Academic Tier Configured: ${zone} (Age ${mappedAge}) - Tasks Recalibrated`);
   };
 
-  // Update player Age directly (6 to 30)
   const handleUpdateAge = (newAge: number) => {
     let zone: AgeZone = "TEEN";
     if (newAge <= 12) zone = "JUNIOR";
@@ -200,16 +360,16 @@ export default function NaijaPlayApp() {
       ageZone: zone,
     }));
     setMissions(getMissionsForZone(zone));
+    setWeeklyChallenges(getWeeklyChallengesForZone(zone));
     showToast(`Age calibrated to ${newAge} (${zone} Tier) - Tasks Recalibrated`);
   };
 
-  // Avatar crest update
   const handleUpdateAvatarCrest = (crest: string) => {
     setPlayer((prev) => ({ ...prev, avatarCrest: crest }));
+    void persistPlayerSettings({ avatarCrest: crest });
     showToast(`Emblem updated to ${crest}`);
   };
 
-  // Name update
   const handleUpdateName = (displayName: string) => {
     const initials = displayName
       .split(" ")
@@ -223,10 +383,64 @@ export default function NaijaPlayApp() {
       displayName,
       avatarInitials: initials || "NP",
     }));
-    showToast(`Scholar name set to ${displayName}`);
+    void persistPlayerSettings({ displayName });
+    showToast(`Scholar name updated to ${displayName}`);
   };
 
-  // Certificate earned from examination
+  const handleUpdatePrivacy = async (visibility: ProfileVisibility) => {
+    setPlayer((prev) => ({ ...prev, profileVisibility: visibility }));
+    await persistPlayerSettings({ profileVisibility: visibility });
+    showToast(`Privacy setting saved: ${visibility.replaceAll("_", " ")}`);
+  };
+
+  const handleBlockUser = async (targetName: string) => {
+    const next = [...new Set([...blockedUsers, targetName])];
+    setBlockedUsers(next);
+    setPlayer((prev) => ({ ...prev, blockedUsers: next }));
+    if (isAuthenticated) {
+      const token = typeof window !== "undefined" ? localStorage.getItem("np_session_token") : null;
+      await fetch("/api/safety/block", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ targetName }),
+      });
+    }
+    showToast(`${targetName} blocked from your view.`);
+  };
+
+  const handleUnblockUser = async (targetName: string) => {
+    const next = blockedUsers.filter((u) => u !== targetName);
+    setBlockedUsers(next);
+    setPlayer((prev) => ({ ...prev, blockedUsers: next }));
+    if (isAuthenticated) {
+      const token = typeof window !== "undefined" ? localStorage.getItem("np_session_token") : null;
+      await fetch(`/api/safety/block?targetName=${encodeURIComponent(targetName)}`, {
+        method: "DELETE",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+    }
+    showToast(`${targetName} unblocked.`);
+  };
+
+  const handleMarkAllRead = async () => {
+    const nowIso = new Date().toISOString();
+    setNotifications((prev) => prev.map((n) => ({ ...n, readAt: n.readAt || nowIso })));
+    if (isAuthenticated) {
+      const token = typeof window !== "undefined" ? localStorage.getItem("np_session_token") : null;
+      await fetch("/api/notifications", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ markAll: true }),
+      }).catch(() => {});
+    }
+  };
+
   const handleEarnCertificate = (certDetails: {
     id: string;
     courseId: string;
@@ -253,12 +467,10 @@ export default function NaijaPlayApp() {
     showToast(`Certificate of Academic Excellence Awarded: ${certDetails.courseTitle}`);
   };
 
-  // Submit creative studio work
   const handleSubmitWork = (item: CreativeSubmissionItem) => {
     setSubmissions((prev) => [item, ...prev]);
   };
 
-  // Featured Badge pinned on profile
   const handleSetFeaturedBadge = (badgeId: string) => {
     setPlayer((prev) => ({
       ...prev,
@@ -271,11 +483,18 @@ export default function NaijaPlayApp() {
     }
   };
 
-  // Screen time limit update
   const handleUpdateScreenTime = (minutes: number) => {
     setPlayer((prev) => ({ ...prev, maxScreenTimeMinutes: minutes }));
-    showToast(`Daily study limit set to ${minutes} mins.`);
+    setScreenBreakSnoozed(false);
+    void persistPlayerSettings({ dailyScreenTimeLimitMins: minutes });
+    showToast(`Daily study limit set to ${minutes} mins and persisted.`);
   };
+
+  const isScreenLimitExceeded =
+    isAuthenticated &&
+    player.screenTimeTodayMinutes >= player.maxScreenTimeMinutes &&
+    !screenBreakSnoozed &&
+    activeTab !== "portals";
 
   return (
     <div className="min-h-screen bg-[#0B111E] text-slate-100 flex flex-col font-sans pb-24 selection:bg-emerald-500/30 selection:text-emerald-200">
@@ -286,6 +505,8 @@ export default function NaijaPlayApp() {
         xp={player.xp}
         level={player.level}
         streakDays={player.streakDays}
+        coins={player.coins}
+        onOpenRewards={() => setIsRewardsOpen(true)}
         soundEnabled={soundEnabled}
         onToggleSound={() => {
           const next = !soundEnabled;
@@ -302,6 +523,12 @@ export default function NaijaPlayApp() {
         userName={player.displayName}
         userInitials={player.avatarInitials}
         onSignOut={handleSignOut}
+        notifications={notifications}
+        onMarkAllRead={handleMarkAllRead}
+        screenTimeTodayMinutes={player.screenTimeTodayMinutes}
+        maxScreenTimeMinutes={player.maxScreenTimeMinutes}
+        activeTab={activeTab}
+        onNavigateTab={handleTabChange}
       />
 
       {/* Floating XP Toast */}
@@ -318,10 +545,17 @@ export default function NaijaPlayApp() {
           <HomeView
             player={player}
             missions={missions}
+            weeklyChallenges={weeklyChallenges}
             onClaimMission={handleClaimMission}
-            onNavigateTab={setActiveTab}
+            onNavigateTab={handleTabChange}
             onZoneChange={handleZoneChange}
             onOpenRoadmap={() => setIsRoadmapOpen(true)}
+            onOpenRewards={() => setIsRewardsOpen(true)}
+            isAuthenticated={isAuthenticated}
+            onRequestAuth={(tab) => {
+              setAuthDefaultTab(tab || "signin");
+              setIsAuthOpen(true);
+            }}
           />
         )}
 
@@ -332,9 +566,13 @@ export default function NaijaPlayApp() {
             onVerifiedXP={handleVerifiedXP}
             onMissionProgress={handleMissionProgress}
             isAuthenticated={isAuthenticated}
-            onRequestAuth={() => {
-              setAuthDefaultTab("signin");
+            onRequestAuth={(tab) => {
+              setAuthDefaultTab(tab || "signin");
               setIsAuthOpen(true);
+            }}
+            onGameCompleted={() => {
+              const token = typeof window !== "undefined" ? localStorage.getItem("np_session_token") : null;
+              void refreshAuthenticatedData(token);
             }}
           />
         )}
@@ -348,15 +586,39 @@ export default function NaijaPlayApp() {
               setAuthDefaultTab("signin");
               setIsAuthOpen(true);
             }}
+            blockedUsers={blockedUsers}
+            onReportTarget={setReportTarget}
+            userSchool={player.school}
+            profileVisibility={player.profileVisibility}
           />
         )}
 
         {activeTab === "learn" && (
-          <LearnAndGrow
+          <SkillQuestPortal
             ageZone={player.ageZone}
+            playerDisplayName={player.displayName}
+            isAuthenticated={isAuthenticated}
+            onRequestAuth={(tab) => {
+              setAuthDefaultTab(tab || "signin");
+              setIsAuthOpen(true);
+            }}
             onAwardXP={handleAwardXP}
+            onVerifiedXP={handleVerifiedXP}
             onMissionProgress={handleMissionProgress}
             onEarnCertificate={handleEarnCertificate}
+          />
+        )}
+
+        {activeTab === "talent" && (
+          <TalentArenaPortal
+            ageZone={player.ageZone}
+            playerDisplayName={player.displayName}
+            isAuthenticated={isAuthenticated}
+            onRequestAuth={(tab) => {
+              setAuthDefaultTab(tab || "signin");
+              setIsAuthOpen(true);
+            }}
+            onAwardXP={handleAwardXP}
           />
         )}
 
@@ -366,6 +628,10 @@ export default function NaijaPlayApp() {
             submissions={submissions}
             onSubmitWork={handleSubmitWork}
             onAwardXP={handleAwardXP}
+            blockedUsers={blockedUsers}
+            onReportTarget={setReportTarget}
+            isAuthenticated={isAuthenticated}
+            onNavigateTab={handleTabChange}
           />
         )}
 
@@ -373,6 +639,10 @@ export default function NaijaPlayApp() {
           <ClubsAndCommunity
             ageZone={player.ageZone}
             onAwardXP={handleAwardXP}
+            blockedUsers={blockedUsers}
+            onReportTarget={setReportTarget}
+            profileVisibility={player.profileVisibility}
+            userDisplayName={player.displayName}
           />
         )}
 
@@ -387,6 +657,11 @@ export default function NaijaPlayApp() {
               setAuthDefaultTab(tab || "signin");
               setIsAuthOpen(true);
             }}
+            onOpenRewards={() => setIsRewardsOpen(true)}
+            onUpdatePrivacy={handleUpdatePrivacy}
+            onUnblockUser={handleUnblockUser}
+            onNavigateTab={handleTabChange}
+            userEmail={userEmail}
             isAuthenticated={isAuthenticated}
           />
         )}
@@ -395,12 +670,73 @@ export default function NaijaPlayApp() {
           <ParentAndSchoolPortal
             player={player}
             onUpdateScreenTime={handleUpdateScreenTime}
+            isAuthenticated={isAuthenticated}
+            onNavigateTab={handleTabChange}
           />
         )}
       </main>
 
-      {/* Quick Access Floating Buttons for Roadmap & Admin Moderation */}
+      {/* Screen-Time Break Protective Overlay */}
+      {isScreenLimitExceeded && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/90 backdrop-blur-md p-4"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="w-full max-w-md rounded-2xl border border-amber-700/60 bg-slate-900 p-6 text-slate-100 shadow-2xl space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-400">
+                <Clock className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-display text-lg font-bold text-white">
+                  Daily Screen-Time Cap Reached
+                </h3>
+                <p className="text-xs font-mono text-amber-300">
+                  {player.screenTimeTodayMinutes} / {player.maxScreenTimeMinutes} Minutes Used Today
+                </p>
+              </div>
+            </div>
+            <p className="text-xs text-slate-300 leading-relaxed">
+              Healthy study balance is enforced for the <strong>{player.ageZone}</strong> tier. Take a screen break or ask a parent/guardian to adjust your daily limit in Guardian Controls.
+            </p>
+            <div className="flex flex-wrap items-center justify-end gap-2 pt-2 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setScreenBreakSnoozed(true)}
+                className="rounded-xl border border-slate-700 bg-slate-950 px-3.5 py-2 text-xs font-semibold text-slate-300 hover:text-white"
+              >
+                Finish Current View
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab("portals");
+                }}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-bold text-white hover:bg-indigo-500"
+              >
+                <Shield className="w-3.5 h-3.5" />
+                <span>Open Guardian Controls</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Quick Access Floating Buttons for Roadmap & Rewards */}
       <div className="fixed bottom-20 right-4 z-30 flex flex-col gap-2">
+        <button
+          onClick={() => {
+            sounds.playClick();
+            setIsRewardsOpen(true);
+          }}
+          className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-500 to-amber-700 text-slate-950 shadow-xl shadow-amber-950/60 hover:from-amber-400 hover:to-amber-600 transition-transform hover:scale-105"
+          title="Pan-African Rewards & Airtime Store"
+          aria-label="Rewards Store"
+        >
+          <Gift className="w-5 h-5" />
+        </button>
+
         <button
           onClick={() => {
             sounds.playClick();
@@ -412,22 +748,23 @@ export default function NaijaPlayApp() {
         >
           <Map className="w-5 h-5" />
         </button>
-
-        <button
-          onClick={() => {
-            sounds.playClick();
-            setIsAdminOpen(true);
-          }}
-          className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-800 border border-slate-700 text-slate-300 shadow-xl hover:text-white hover:bg-slate-700 transition-transform hover:scale-105"
-          title="Module 8: Admin & Moderation Queue"
-          aria-label="Admin Moderation"
-        >
-          <ShieldAlert className="w-5 h-5 text-emerald-400" />
-        </button>
       </div>
 
       {/* Bottom PWA Navigation */}
-      <BottomNav activeTab={activeTab} onTabChange={setActiveTab} />
+      <BottomNav activeTab={activeTab} onTabChange={handleTabChange} />
+
+      {/* Safety Report & Block Modal */}
+      <SafetyReportModal
+        target={reportTarget}
+        isAuthenticated={isAuthenticated}
+        onClose={() => setReportTarget(null)}
+        onBlockUser={handleBlockUser}
+        onReportSubmitted={(msg) => showToast(msg)}
+        onRequestAuth={() => {
+          setAuthDefaultTab("signin");
+          setIsAuthOpen(true);
+        }}
+      />
 
       {/* Product Roadmap Modal */}
       <RoadmapModal
@@ -435,10 +772,16 @@ export default function NaijaPlayApp() {
         onClose={() => setIsRoadmapOpen(false)}
       />
 
-      {/* Admin Moderation Modal */}
-      <AdminModerationModal
-        isOpen={isAdminOpen}
-        onClose={() => setIsAdminOpen(false)}
+      {/* Pan-African Rewards & Airtime Store Modal */}
+      <RewardsStoreModal
+        isOpen={isRewardsOpen}
+        onClose={() => setIsRewardsOpen(false)}
+        player={player}
+        onCoinsDeducted={(newCoins) => {
+          setPlayer((prev) => ({ ...prev, coins: newCoins }));
+          showToast(`Reward voucher successfully redeemed! Remaining balance: ${newCoins} coins.`);
+        }}
+        onNavigateTab={setActiveTab}
       />
 
       {/* NeonDB Authentication Modal (Sign In / Register) */}

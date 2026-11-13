@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import {
   Flame,
   Award,
@@ -19,27 +19,48 @@ import {
   TrendingUp,
   Shield,
   GraduationCap,
+  Gift,
+  Coins,
+  Calendar,
+  Compass,
+  Brain,
 } from "lucide-react";
 import { AgeZone, DailyMission, NavTab, PlayerState } from "@/types/naijaplay";
+import { CORE_GAME_CATALOG } from "@/data/mockData";
+import { EcosystemHub } from "@/components/EcosystemHub";
 import { sounds } from "@/lib/audio";
 
 interface HomeViewProps {
   player: PlayerState;
   missions: DailyMission[];
+  weeklyChallenges?: DailyMission[];
   onClaimMission: (missionId: string) => void;
   onNavigateTab: (tab: NavTab) => void;
   onZoneChange: (zone: AgeZone) => void;
   onOpenRoadmap: () => void;
+  onOpenRewards?: () => void;
+  isAuthenticated?: boolean;
+  onRequestAuth?: (tab?: "signin" | "register") => void;
 }
 
 export const HomeView: React.FC<HomeViewProps> = ({
   player,
   missions,
+  weeklyChallenges = [],
   onClaimMission,
   onNavigateTab,
   onZoneChange,
   onOpenRoadmap,
+  onOpenRewards,
+  isAuthenticated = false,
+  onRequestAuth = () => {},
 }) => {
+  const [challengeTab, setChallengeTab] = useState<"DAILY" | "WEEKLY">("DAILY");
+  const activeChallenges = challengeTab === "DAILY" ? missions : weeklyChallenges;
+  const recommendedGames = CORE_GAME_CATALOG.filter((g) =>
+    g.recommendedZones.includes(player.ageZone),
+  ).slice(0, 4);
+
   const progressPercent = Math.min(
     100,
     Math.round((player.xp / player.nextLevelXp) * 100),
@@ -51,13 +72,22 @@ export const HomeView: React.FC<HomeViewProps> = ({
       <div className="relative overflow-hidden rounded-3xl border border-slate-800 bg-gradient-to-br from-slate-900 via-slate-950 to-[#0A101C] p-6 sm:p-8 shadow-2xl">
         <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
           <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-mono font-bold uppercase tracking-widest text-emerald-400">
-                Academic Dashboard
+            <div className="flex flex-wrap items-center gap-2 text-xs font-mono">
+              <span className="font-bold uppercase tracking-widest text-emerald-400">
+                Academic & Entertainment Hub
               </span>
-              <span className="rounded-md bg-slate-800 border border-slate-700 px-2 py-0.5 text-[10px] font-mono font-bold text-slate-300">
-                Verified Scholar
+              <span className="text-slate-600">·</span>
+              <span className="text-slate-300">
+                {player.ageZone === "JUNIOR" || player.ageZone === "TEEN"
+                  ? "Minor-Safe Guardian Mode"
+                  : "Verified Scholar"}
               </span>
+              {player.username && (
+                <>
+                  <span className="text-slate-600">·</span>
+                  <span className="text-emerald-300">@{player.username}</span>
+                </>
+              )}
             </div>
 
             <div className="flex items-center gap-3.5">
@@ -78,7 +108,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
             {/* Level Progress Bar */}
             <div className="pt-2 max-w-lg space-y-1.5">
               <div className="flex items-center justify-between text-xs text-slate-300 font-mono">
-                <span>Degree Progression to Level {player.level + 1}</span>
+                <span>Progression to Level {player.level + 1}</span>
                 <span className="font-bold text-emerald-400">
                   {player.xp} / {player.nextLevelXp} XP
                 </span>
@@ -93,51 +123,170 @@ export const HomeView: React.FC<HomeViewProps> = ({
           </div>
 
           {/* Key Metrics Counters */}
-          <div className="grid grid-cols-3 gap-3 self-stretch lg:self-auto">
-            <div className="rounded-2xl border border-slate-800 bg-slate-950 p-4 text-center">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 self-stretch lg:self-auto">
+            <div className="rounded-2xl border border-slate-800 bg-slate-950 p-3.5 text-center">
               <span className="text-[11px] text-slate-400 block font-mono">Academic XP</span>
-              <span className="font-display text-xl sm:text-2xl font-extrabold text-emerald-400 font-mono mt-0.5 block">
+              <span className="font-display text-lg sm:text-xl font-extrabold text-emerald-400 font-mono mt-0.5 block">
                 {player.xp.toLocaleString()}
               </span>
             </div>
-            <div className="rounded-2xl border border-slate-800 bg-slate-950 p-4 text-center">
+            <div className="rounded-2xl border border-slate-800 bg-slate-950 p-3.5 text-center">
               <span className="text-[11px] text-slate-400 block font-mono">Honours</span>
-              <span className="font-display text-xl sm:text-2xl font-extrabold text-amber-400 font-mono mt-0.5 block">
-                {player.badges.length}
+              <span className="font-display text-lg sm:text-xl font-extrabold text-amber-400 font-mono mt-0.5 block">
+                {player.badges.length} Badges
               </span>
             </div>
-            <div className="rounded-2xl border border-slate-800 bg-slate-950 p-4 text-center">
+            <div className="rounded-2xl border border-slate-800 bg-slate-950 p-3.5 text-center">
               <span className="text-[11px] text-slate-400 block font-mono">Discipline</span>
-              <span className="font-display text-xl sm:text-2xl font-extrabold text-amber-500 font-mono mt-0.5 flex items-center justify-center gap-1">
+              <span className="font-display text-lg sm:text-xl font-extrabold text-amber-500 font-mono mt-0.5 flex items-center justify-center gap-1">
                 <Flame className="w-4 h-4 fill-amber-500 text-amber-500" />
                 {player.streakDays}d
               </span>
             </div>
+            <button
+              onClick={() => {
+                if (onOpenRewards) {
+                  sounds.playClick();
+                  onOpenRewards();
+                }
+              }}
+              className="rounded-2xl border border-amber-500/30 bg-slate-950 p-3.5 text-center hover:border-amber-500/60 hover:bg-amber-950/20 transition-all group cursor-pointer"
+              title="Pan-African Rewards Store · Redeem Airtime & Vouchers"
+            >
+              <span className="text-[11px] text-slate-400 block font-mono flex items-center justify-center gap-1 group-hover:text-amber-300">
+                <Gift className="w-3 h-3 text-amber-400" />
+                <span>Rewards</span>
+              </span>
+              <span className="font-display text-lg sm:text-xl font-extrabold text-amber-300 font-mono mt-0.5 block">
+                {player.coins > 0 ? player.coins.toLocaleString() : "1,850"}
+              </span>
+            </button>
           </div>
         </div>
       </div>
 
-      {/* 2. TODAY'S MISSIONS CHECKLIST */}
-      <div className="rounded-3xl border border-slate-800 bg-slate-900/80 p-6 sm:p-7 shadow-xl space-y-5">
-        <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+      {/* 3-IN-1 ECOSYSTEM LAUNCHPAD, UNIFIED SEARCH, WORKSPACES & PLANS */}
+      <EcosystemHub
+        ageZone={player.ageZone}
+        isAuthenticated={isAuthenticated}
+        onRequestAuth={onRequestAuth}
+        onNavigateTab={onNavigateTab}
+      />
+
+      {/* RECOMMENDED GAMES FOR YOUR AGE TIER */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
           <div>
             <div className="flex items-center gap-2">
-              <Zap className="w-4 h-4 text-amber-400" />
+              <Compass className="w-4 h-4 text-emerald-400" />
               <h2 className="font-display text-lg font-bold text-white">
-                Daily Academic Missions
+                Recommended Games · {player.ageZone} Tier
+              </h2>
+            </div>
+            <p className="text-xs text-slate-400">
+              Curated quizzes, speed sprints, word puzzles, and memory drills tuned to your profile.
+            </p>
+          </div>
+          <button
+            onClick={() => {
+              sounds.playClick();
+              onNavigateTab("games");
+            }}
+            className="flex items-center gap-1 text-xs font-semibold text-emerald-400 hover:text-emerald-300"
+          >
+            <span>Open Game Library</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {recommendedGames.map((game) => (
+            <button
+              key={game.id}
+              type="button"
+              onClick={() => {
+                sounds.playClick();
+                onNavigateTab("games");
+              }}
+              className="text-left rounded-2xl border border-slate-800 bg-slate-900/80 p-4 hover:border-emerald-500/60 transition-all space-y-2.5 flex flex-col justify-between"
+            >
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between text-[11px] font-mono">
+                  <span className="text-emerald-400 font-bold">{game.category.replace("_", " ")}</span>
+                  <span className="text-amber-300">{game.xpRange}</span>
+                </div>
+                <h3 className="font-display text-base font-bold text-white">{game.title}</h3>
+                <p className="text-[11px] text-slate-400 line-clamp-2">{game.description}</p>
+              </div>
+              <div className="flex items-center justify-between pt-2 border-t border-slate-800/80 text-[11px] font-mono text-emerald-300">
+                <span>Timed & Untimed</span>
+                <span className="font-bold">Play Now →</span>
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+
+
+      {/* 2. DAILY & WEEKLY CHALLENGES CHECKLIST */}
+      <div className="rounded-3xl border border-slate-800 bg-slate-900/80 p-6 sm:p-7 shadow-xl space-y-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
+          <div>
+            <div className="flex items-center gap-2">
+              {challengeTab === "DAILY" ? (
+                <Zap className="w-4 h-4 text-amber-400" />
+              ) : (
+                <Calendar className="w-4 h-4 text-emerald-400" />
+              )}
+              <h2 className="font-display text-lg font-bold text-white">
+                {challengeTab === "DAILY" ? "Daily Academic Missions" : "Weekly Mastery Challenges"}
               </h2>
             </div>
             <p className="text-xs text-slate-400 mt-0.5">
-              Complete daily goals to build academic consistency and unlock formal certificates.
+              {challengeTab === "DAILY"
+                ? "Complete daily goals to build academic consistency and earn verified XP."
+                : "Multi-game weekly challenges for higher XP payouts and seasonal leaderboard pushes."}
             </p>
           </div>
-          <span className="text-xs font-mono font-bold text-emerald-400">
-            {missions.filter((m) => m.claimed).length} / {missions.length} Claimed
-          </span>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1 rounded-xl bg-slate-950 border border-slate-800 p-1 text-xs font-mono">
+              <button
+                type="button"
+                onClick={() => {
+                  sounds.playClick();
+                  setChallengeTab("DAILY");
+                }}
+                className={`px-3 py-1 rounded-lg font-bold transition-colors ${
+                  challengeTab === "DAILY"
+                    ? "bg-emerald-600 text-white"
+                    : "text-slate-400 hover:text-white"
+                }`}
+              >
+                Daily ({missions.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  sounds.playClick();
+                  setChallengeTab("WEEKLY");
+                }}
+                className={`px-3 py-1 rounded-lg font-bold transition-colors ${
+                  challengeTab === "WEEKLY"
+                    ? "bg-emerald-600 text-white"
+                    : "text-slate-400 hover:text-white"
+                }`}
+              >
+                Weekly ({weeklyChallenges.length})
+              </button>
+            </div>
+            <span className="text-xs font-mono font-bold text-emerald-400">
+              {activeChallenges.filter((m) => m.claimed).length} / {activeChallenges.length} Claimed
+            </span>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {missions.map((mission) => (
+          {activeChallenges.map((mission) => (
             <div
               key={mission.id}
               className={`rounded-2xl border p-4.5 flex flex-col justify-between transition-all space-y-3 ${
@@ -206,15 +355,15 @@ export const HomeView: React.FC<HomeViewProps> = ({
         </div>
       </div>
 
-      {/* 3. CORE ACADEMIC DISCIPLINES DISCOVERY STRIP */}
+      {/* 3. SKILLQUEST CURRICULUM & LEARNING PATHS DISCOVERY STRIP */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <div>
             <h2 className="font-display text-xl font-bold text-white">
-              Core Academic Disciplines & Testing
+              SkillQuest Learning Paths & Structured Exams
             </h2>
             <p className="text-xs text-slate-400">
-              Verified curriculum across all 8 fields of higher learning.
+              Guided learning paths, practical project labs, flashcards, and verified SkillQuest credentials across 8 disciplines.
             </p>
           </div>
           <button
@@ -224,7 +373,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
             }}
             className="flex items-center gap-1 text-xs font-semibold text-emerald-400 hover:text-emerald-300"
           >
-            <span>Explore All 8 Subjects</span>
+            <span>Open SkillQuest Catalog</span>
             <ArrowRight className="w-3.5 h-3.5" />
           </button>
         </div>
@@ -244,20 +393,20 @@ export const HomeView: React.FC<HomeViewProps> = ({
                   <Sigma className="w-5 h-5" />
                 </span>
                 <span className="rounded bg-slate-800 px-2 py-0.5 text-[10px] font-mono font-bold text-slate-300">
-                  Advanced
+                  SkillQuest Track
                 </span>
               </div>
               <h3 className="font-display text-lg font-bold text-white group-hover:text-emerald-300">
                 Calculus & Quantitative Reasoning
               </h3>
               <p className="text-xs text-slate-300">
-                Limits, differential equations, integral calculus, and engineering optimization models.
+                Limits, differential equations, integral calculus, practical labs, and verified assessment certificates.
               </p>
             </div>
             <div className="mt-4 flex items-center justify-between text-xs text-slate-400 border-t border-slate-800/80 pt-3 font-mono">
-              <span>5-Question Exam</span>
+              <span>Path · Practical Lab · Exam</span>
               <span className="font-semibold text-emerald-400 flex items-center gap-1">
-                Study & Test <ArrowRight className="w-3.5 h-3.5" />
+                Start Path <ArrowRight className="w-3.5 h-3.5" />
               </span>
             </div>
           </div>
@@ -276,20 +425,20 @@ export const HomeView: React.FC<HomeViewProps> = ({
                   <Terminal className="w-5 h-5" />
                 </span>
                 <span className="rounded bg-slate-800 px-2 py-0.5 text-[10px] font-mono font-bold text-slate-300">
-                  Advanced
+                  SkillQuest Track
                 </span>
               </div>
               <h3 className="font-display text-lg font-bold text-white group-hover:text-blue-300">
                 Computer Science & Algorithmic Logic
               </h3>
               <p className="text-xs text-slate-300">
-                Asymptotic Big-O complexity, binary search trees, graph theory, and ACID databases.
+                Asymptotic Big-O complexity, binary search trees, graph theory, ACID databases, and coding labs.
               </p>
             </div>
             <div className="mt-4 flex items-center justify-between text-xs text-slate-400 border-t border-slate-800/80 pt-3 font-mono">
-              <span>5-Question Exam</span>
+              <span>Path · Practical Lab · Exam</span>
               <span className="font-semibold text-blue-400 flex items-center gap-1">
-                Study & Test <ArrowRight className="w-3.5 h-3.5" />
+                Start Path <ArrowRight className="w-3.5 h-3.5" />
               </span>
             </div>
           </div>
@@ -308,39 +457,39 @@ export const HomeView: React.FC<HomeViewProps> = ({
                   <TrendingUp className="w-5 h-5" />
                 </span>
                 <span className="rounded bg-slate-800 px-2 py-0.5 text-[10px] font-mono font-bold text-slate-300">
-                  Advanced
+                  SkillQuest Track
                 </span>
               </div>
               <h3 className="font-display text-lg font-bold text-white group-hover:text-amber-300">
                 Macroeconomics & Wealth Architecture
               </h3>
               <p className="text-xs text-slate-300">
-                Sovereign monetary policy, GDP components, DCF valuation, and capital allocation.
+                Sovereign monetary policy, GDP components, DCF valuation, and applied financial modeling projects.
               </p>
             </div>
             <div className="mt-4 flex items-center justify-between text-xs text-slate-400 border-t border-slate-800/80 pt-3 font-mono">
-              <span>5-Question Exam</span>
+              <span>Path · Practical Lab · Exam</span>
               <span className="font-semibold text-amber-400 flex items-center gap-1">
-                Study & Test <ArrowRight className="w-3.5 h-3.5" />
+                Start Path <ArrowRight className="w-3.5 h-3.5" />
               </span>
             </div>
           </div>
         </div>
       </div>
 
-      {/* 4. CREATIVE STUDIO & OLYMPIAD SPOTLIGHT BANNER */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        <div className="rounded-3xl border border-slate-800 bg-slate-900 p-6 sm:p-7 space-y-3 flex flex-col justify-between">
+      {/* 4. CREATIVE STUDIO, TALENT ARENA & OLYMPIAD SPOTLIGHT BANNER */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+        <div className="rounded-3xl border border-slate-800 bg-slate-900 p-6 space-y-3 flex flex-col justify-between">
           <div className="space-y-2">
             <div className="flex items-center gap-2 text-xs font-mono font-bold text-emerald-400 uppercase">
               <Layers className="w-4 h-4" />
-              <span>Photoshop Web Studio</span>
+              <span>NaijaPlay Studio</span>
             </div>
-            <h3 className="font-display text-xl font-bold text-white">
+            <h3 className="font-display text-lg font-bold text-white">
               Engineering Diagrams & Digital Studio
             </h3>
             <p className="text-xs text-slate-300 leading-relaxed">
-              Open image files, annotate architectural diagrams, apply image filters, and publish peer-reviewed visual compositions to the Scholarly Showcase.
+              Create architectural diagrams and illustrations, then promote approved compositions directly to your Talent Arena portfolio.
             </p>
           </div>
           <button
@@ -348,24 +497,49 @@ export const HomeView: React.FC<HomeViewProps> = ({
               sounds.playClick();
               onNavigateTab("studio");
             }}
-            className="flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-2.5 text-xs font-bold text-white hover:bg-emerald-500 transition-colors shadow-lg shadow-emerald-950 w-full sm:w-auto self-start"
+            className="flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-bold text-white hover:bg-emerald-500 transition-colors shadow-lg shadow-emerald-950 w-full sm:w-auto self-start"
           >
-            <span>Launch Photoshop Studio</span>
+            <span>Launch Studio</span>
             <ArrowRight className="w-4 h-4" />
           </button>
         </div>
 
-        <div className="rounded-3xl border border-slate-800 bg-slate-900 p-6 sm:p-7 space-y-3 flex flex-col justify-between">
+        <div className="rounded-3xl border border-slate-800 bg-slate-900 p-6 space-y-3 flex flex-col justify-between">
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 text-xs font-mono font-bold text-sky-400 uppercase">
+              <Award className="w-4 h-4" />
+              <span>Talent Arena</span>
+            </div>
+            <h3 className="font-display text-lg font-bold text-white">
+              Portfolios & Judged Showcases
+            </h3>
+            <p className="text-xs text-slate-300 leading-relaxed">
+              Build creative and engineering portfolios, enter school or sponsored competitions, and receive multi-judge rubric scorecards.
+            </p>
+          </div>
+          <button
+            onClick={() => {
+              sounds.playClick();
+              onNavigateTab("talent");
+            }}
+            className="flex items-center justify-center gap-2 rounded-xl bg-sky-600 px-4 py-2.5 text-xs font-bold text-white hover:bg-sky-500 transition-colors w-full sm:w-auto self-start"
+          >
+            <span>Open Talent Arena</span>
+            <ArrowRight className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="rounded-3xl border border-slate-800 bg-slate-900 p-6 space-y-3 flex flex-col justify-between">
           <div className="space-y-2">
             <div className="flex items-center gap-2 text-xs font-mono font-bold text-amber-400 uppercase">
               <Trophy className="w-4 h-4" />
-              <span>National Interscholastic Olympiad</span>
+              <span>NaijaPlay Compete</span>
             </div>
-            <h3 className="font-display text-xl font-bold text-white">
+            <h3 className="font-display text-lg font-bold text-white">
               STEM & Quantitative Olympiad Derby
             </h3>
             <p className="text-xs text-slate-300 leading-relaxed">
-              1,420 registered scholars from King&apos;s College, Queen&apos;s College, Loyola Jesuit, and national secondary schools competing for laboratory research grants.
+              Verified interscholastic brackets, state rankings, and fair-play audited competitions across Nigeria.
             </p>
           </div>
           <button
@@ -373,9 +547,9 @@ export const HomeView: React.FC<HomeViewProps> = ({
               sounds.playClick();
               onNavigateTab("compete");
             }}
-            className="flex items-center justify-center gap-2 rounded-xl bg-slate-800 border border-slate-700 px-5 py-2.5 text-xs font-bold text-slate-200 hover:text-white hover:bg-slate-700 transition-colors w-full sm:w-auto self-start"
+            className="flex items-center justify-center gap-2 rounded-xl bg-slate-800 border border-slate-700 px-4 py-2.5 text-xs font-bold text-slate-200 hover:text-white hover:bg-slate-700 transition-colors w-full sm:w-auto self-start"
           >
-            <span>View Competition Standings</span>
+            <span>View Standings</span>
             <ArrowRight className="w-4 h-4" />
           </button>
         </div>

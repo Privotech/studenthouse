@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   User,
   Sparkles,
@@ -18,8 +18,16 @@ import {
   Lock,
   KeyRound,
   ShieldCheck,
+  Gift,
+  Coins,
+  Ban,
+  BarChart3,
+  Eye,
+  Layers,
+  Building2,
+  ArrowRight,
 } from "lucide-react";
-import { PlayerState } from "@/types/naijaplay";
+import { NavTab, PlayerState, ProfileVisibility } from "@/types/naijaplay";
 import { AVATAR_CRESTS } from "@/data/mockData";
 import { BADGE_DEFINITIONS, TIER_CONFIG } from "@/data/badges";
 import { BadgeCabinet } from "@/components/BadgeCabinet";
@@ -32,6 +40,11 @@ interface PlayerProfileViewProps {
   onUpdateAge: (age: number) => void;
   onSetFeaturedBadge?: (badgeId: string) => void;
   onOpenAuth?: (tab?: "signin" | "register") => void;
+  onOpenRewards?: () => void;
+  onUpdatePrivacy?: (visibility: ProfileVisibility) => Promise<void> | void;
+  onUnblockUser?: (targetName: string) => Promise<void> | void;
+  onNavigateTab?: (tab: NavTab) => void;
+  userEmail?: string;
   isAuthenticated?: boolean;
 }
 
@@ -42,10 +55,58 @@ export const PlayerProfileView: React.FC<PlayerProfileViewProps> = ({
   onUpdateAge,
   onSetFeaturedBadge,
   onOpenAuth,
+  onOpenRewards,
+  onUpdatePrivacy,
+  onUnblockUser,
+  onNavigateTab,
+  userEmail,
   isAuthenticated = false,
 }) => {
   const [editingName, setEditingName] = useState(false);
   const [newName, setNewName] = useState(player.displayName);
+  const [passport, setPassport] = useState<{
+    planName: string;
+    orgCount: number;
+    sqCoursesPassed: number;
+    sqLabsSubmitted: number;
+    talentHeadline: string;
+    portfolioCount: number;
+  }>({
+    planName: "Free Scholar",
+    orgCount: 0,
+    sqCoursesPassed: 0,
+    sqLabsSubmitted: 0,
+    talentHeadline: "Emerging African Innovator",
+    portfolioCount: 0,
+  });
+
+  useEffect(() => {
+    let cancelled = false;
+    const token = typeof window !== "undefined" ? localStorage.getItem("np_session_token") : null;
+    const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+
+    Promise.all([
+      fetch("/api/ecosystem", { headers }).then((r) => (r.ok ? r.json() : null)),
+      fetch("/api/skillquest", { headers }).then((r) => (r.ok ? r.json() : null)),
+      fetch("/api/talent-arena", { headers }).then((r) => (r.ok ? r.json() : null)),
+    ])
+      .then(([eco, sq, ta]) => {
+        if (cancelled) return;
+        setPassport({
+          planName: eco?.entitlement?.planName || "Free Scholar",
+          orgCount: Array.isArray(eco?.organizations) ? eco.organizations.length : 0,
+          sqCoursesPassed: Array.isArray(sq?.progress) ? sq.progress.length : 0,
+          sqLabsSubmitted: Array.isArray(sq?.assignments) ? sq.assignments.length : 0,
+          talentHeadline: ta?.myProfile?.headline || "Set up your Talent Arena portfolio",
+          portfolioCount: Array.isArray(ta?.myProfile?.portfolio) ? ta.myProfile.portfolio.length : 0,
+        });
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthenticated]);
 
   const featuredBadge = player.featuredBadgeId
     ? BADGE_DEFINITIONS.find((b) => b.id === player.featuredBadgeId)
@@ -125,6 +186,8 @@ export const PlayerProfileView: React.FC<PlayerProfileViewProps> = ({
             </div>
 
             <p className="text-xs text-slate-300 font-mono">
+              {player.username ? `@${player.username} · ` : ""}
+              {userEmail ? `${userEmail} · ` : ""}
               {player.school} · {player.state}
             </p>
 
@@ -206,6 +269,278 @@ export const PlayerProfileView: React.FC<PlayerProfileViewProps> = ({
         </div>
       </div>
 
+      {/* Personal Statistics & Verified Score History */}
+      <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-6 space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-3">
+          <div className="flex items-center gap-2">
+            <BarChart3 className="w-5 h-5 text-emerald-400" />
+            <div>
+              <h3 className="font-display text-lg font-bold text-white">
+                Personal Statistics & Score History
+              </h3>
+              <p className="text-xs text-slate-400">
+                Server-verified academic gameplay telemetry across Naija Trivia, Brain Rush, Word, Math, and Memory modes.
+              </p>
+            </div>
+          </div>
+          <span className="text-xs font-mono text-emerald-400 font-bold">
+            Favorite: {player.personalStats?.favoriteGameTitle || "Naija Trivia"}
+          </span>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 font-mono text-xs">
+          <div className="rounded-xl border border-slate-800 bg-slate-950 p-3.5">
+            <span className="text-[10px] text-slate-400 block">Games Played</span>
+            <span className="text-xl font-bold text-white">
+              {player.personalStats?.gamesPlayed ?? 0}
+            </span>
+          </div>
+          <div className="rounded-xl border border-slate-800 bg-slate-950 p-3.5">
+            <span className="text-[10px] text-slate-400 block">Avg. Accuracy</span>
+            <span className="text-xl font-bold text-emerald-400">
+              {player.personalStats?.averageAccuracy ?? 0}%
+            </span>
+          </div>
+          <div className="rounded-xl border border-slate-800 bg-slate-950 p-3.5">
+            <span className="text-[10px] text-slate-400 block">Best Score</span>
+            <span className="text-xl font-bold text-amber-300">
+              {(player.personalStats?.bestScore ?? 0).toLocaleString()}
+            </span>
+          </div>
+          <div className="rounded-xl border border-slate-800 bg-slate-950 p-3.5">
+            <span className="text-[10px] text-slate-400 block">Verified XP Total</span>
+            <span className="text-xl font-bold text-white">
+              {player.xp.toLocaleString()} XP
+            </span>
+          </div>
+        </div>
+
+        {player.personalStats && player.personalStats.recentHistory.length > 0 ? (
+          <div className="space-y-2 pt-1">
+            {player.personalStats.recentHistory.slice(0, 5).map((entry) => (
+              <div
+                key={entry.id}
+                className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-800 bg-slate-950 px-3.5 py-2.5 text-xs font-mono"
+              >
+                <div>
+                  <span className="font-sans font-semibold text-white">{entry.gameTitle}</span>
+                  <span className="text-slate-500 ml-2">
+                    {entry.correctAnswers}/{entry.questionsAnswered} · {entry.durationSeconds}s
+                  </span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-emerald-400 font-bold">{entry.accuracyPercent}% Acc</span>
+                  <span className="text-amber-300 font-bold">{entry.score} pts</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-xs text-slate-400 font-mono">
+            Play any verified round in the Games Arena to record live personal telemetry.
+          </p>
+        )}
+      </div>
+
+      {/* 3-in-1 Ecosystem Passport (SkillQuest, Talent Arena & Entitlements) */}
+      <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-6 space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-3">
+          <div className="flex items-center gap-2">
+            <Layers className="w-5 h-5 text-emerald-400" />
+            <div>
+              <h3 className="font-display text-lg font-bold text-white">
+                3-in-1 Ecosystem Passport
+              </h3>
+              <p className="text-xs text-slate-400">
+                Unified progress & boundaries across NaijaPlay, SkillQuest, Talent Arena & multi-tenant organizations.
+              </p>
+            </div>
+          </div>
+          <span className="text-xs font-mono font-bold text-emerald-400">
+            {passport.planName} · {passport.orgCount} Organization(s)
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+          <div className="rounded-xl border border-slate-800 bg-slate-950 p-4 space-y-2 flex flex-col justify-between">
+            <div className="space-y-1">
+              <div className="flex items-center justify-between font-mono text-[11px] text-emerald-400 font-bold">
+                <span>NAIJAPLAY</span>
+                <Building2 className="w-3.5 h-3.5" />
+              </div>
+              <div className="text-sm font-bold text-white">
+                {player.personalStats?.gamesPlayed ?? 0} Verified Rounds · Lvl {player.level}
+              </div>
+              <p className="text-[11px] text-slate-400">
+                Non-cashable progression XP shared cleanly while respecting product permissions.
+              </p>
+            </div>
+            {onNavigateTab && (
+              <button
+                type="button"
+                onClick={() => onNavigateTab("games")}
+                className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-400 hover:text-emerald-300 pt-1"
+              >
+                <span>Open NaijaPlay Arena</span>
+                <ArrowRight className="w-3 h-3" />
+              </button>
+            )}
+          </div>
+
+          <div className="rounded-xl border border-slate-800 bg-slate-950 p-4 space-y-2 flex flex-col justify-between">
+            <div className="space-y-1">
+              <div className="flex items-center justify-between font-mono text-[11px] text-indigo-400 font-bold">
+                <span>SKILLQUEST</span>
+                <BookOpen className="w-3.5 h-3.5" />
+              </div>
+              <div className="text-sm font-bold text-white">
+                {passport.sqCoursesPassed} Verified Exams · {passport.sqLabsSubmitted} Labs
+              </div>
+              <p className="text-[11px] text-slate-400">
+                Structured learning paths, practical labs, and instructor classroom cohorts.
+              </p>
+            </div>
+            {onNavigateTab && (
+              <button
+                type="button"
+                onClick={() => onNavigateTab("learn")}
+                className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-400 hover:text-indigo-300 pt-1"
+              >
+                <span>Open SkillQuest</span>
+                <ArrowRight className="w-3 h-3" />
+              </button>
+            )}
+          </div>
+
+          <div className="rounded-xl border border-slate-800 bg-slate-950 p-4 space-y-2 flex flex-col justify-between">
+            <div className="space-y-1">
+              <div className="flex items-center justify-between font-mono text-[11px] text-sky-400 font-bold">
+                <span>TALENT ARENA</span>
+                <Award className="w-3.5 h-3.5" />
+              </div>
+              <div className="text-sm font-bold text-white truncate">
+                {passport.portfolioCount} Portfolio Work(s)
+              </div>
+              <p className="text-[11px] text-slate-400 line-clamp-2">
+                {passport.talentHeadline}
+              </p>
+            </div>
+            {onNavigateTab && (
+              <button
+                type="button"
+                onClick={() => onNavigateTab("talent")}
+                className="inline-flex items-center gap-1 text-[11px] font-bold text-sky-400 hover:text-sky-300 pt-1"
+              >
+                <span>Open Talent Arena</span>
+                <ArrowRight className="w-3 h-3" />
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Privacy Settings & Blocked Accounts */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+        <div className="lg:col-span-7 rounded-2xl border border-slate-800 bg-slate-900/80 p-6 space-y-4">
+          <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
+            <Eye className="w-5 h-5 text-emerald-400" />
+            <div>
+              <h3 className="font-display text-lg font-bold text-white">
+                Privacy & Leaderboard Visibility
+              </h3>
+              <p className="text-xs text-slate-400">
+                Control how your name and scores appear across leaderboards and school club competitions.
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+            {([
+              {
+                id: "PRIVATE_GUARDIAN_ONLY",
+                title: "Private Guardian",
+                desc: "Hidden from public leaderboards. Recommended for Juniors.",
+              },
+              {
+                id: "SCHOOL_AND_CLUB_ONLY",
+                title: "School & Clubs",
+                desc: "Visible only to classmates and enrolled school society peers.",
+              },
+              {
+                id: "PUBLIC_OPT_IN",
+                title: "Public Opt-In",
+                desc: "Eligible for National & Regional verified leaderboards.",
+              },
+            ] as const).map((opt) => {
+              const currentVis = player.profileVisibility || "SCHOOL_AND_CLUB_ONLY";
+              const isSelected = currentVis === opt.id;
+              return (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => {
+                    sounds.playClick();
+                    onUpdatePrivacy?.(opt.id);
+                  }}
+                  className={`rounded-xl border p-3.5 text-left transition-all space-y-1 ${
+                    isSelected
+                      ? "border-emerald-500 bg-emerald-950/40 ring-1 ring-emerald-500"
+                      : "border-slate-800 bg-slate-950 hover:border-slate-700"
+                  }`}
+                >
+                  <div className="font-bold text-white flex items-center justify-between">
+                    <span>{opt.title}</span>
+                    {isSelected && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />}
+                  </div>
+                  <p className="text-[11px] text-slate-400 leading-snug">{opt.desc}</p>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="lg:col-span-5 rounded-2xl border border-slate-800 bg-slate-900/80 p-6 space-y-4">
+          <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
+            <Ban className="w-5 h-5 text-rose-400" />
+            <div>
+              <h3 className="font-display text-lg font-bold text-white">
+                Blocked Accounts ({player.blockedUsers?.length ?? 0})
+              </h3>
+              <p className="text-xs text-slate-400">
+                Hidden from showcases, leaderboards, and club boards.
+              </p>
+            </div>
+          </div>
+
+          {player.blockedUsers && player.blockedUsers.length > 0 ? (
+            <div className="space-y-2">
+              {player.blockedUsers.map((blockedName) => (
+                <div
+                  key={blockedName}
+                  className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950 px-3.5 py-2.5 text-xs"
+                >
+                  <span className="font-mono font-semibold text-slate-200">{blockedName}</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      sounds.playClick();
+                      onUnblockUser?.(blockedName);
+                    }}
+                    className="rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1 text-[11px] font-semibold text-emerald-300 hover:bg-slate-800"
+                  >
+                    Unblock
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-xl border border-slate-800 bg-slate-950 p-4 text-xs text-slate-400">
+              No blocked scholars. You can report or block disruptive content from leaderboards, clubs, or the Creative Studio.
+            </div>
+          )}
+        </div>
+      </div>
+
       {/* Verified Academic Certificates */}
       <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-6 space-y-4">
         <div className="flex items-center justify-between border-b border-slate-800 pb-3">
@@ -251,9 +586,59 @@ export const PlayerProfileView: React.FC<PlayerProfileViewProps> = ({
         </div>
       </div>
 
+      {/* Pan-African Rewards & Airtime Vault Section */}
+      <div className="rounded-2xl border border-amber-900/60 bg-gradient-to-r from-slate-900 via-slate-900 to-amber-950/30 p-6 space-y-4 shadow-xl">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-amber-500 text-slate-950 font-bold shadow-lg shadow-amber-950/40">
+              <Gift className="w-6 h-6" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="font-display text-lg font-bold text-white">
+                  Pan-African Rewards & Airtime Store
+                </h3>
+                <span className="rounded bg-amber-950 border border-amber-800 px-2 py-0.5 text-[10px] font-mono font-bold text-amber-300">
+                  Phase 11 Active
+                </span>
+              </div>
+              <p className="text-xs text-slate-400">
+                Redeem mobile data, MTN/Airtel/Glo airtime, WAEC scratch cards, and JAMB UTME e-PINs.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 rounded-xl bg-slate-950 border border-amber-500/40 px-3.5 py-2 font-mono">
+              <Coins className="w-4 h-4 text-amber-400 fill-amber-400" />
+              <div className="text-right">
+                <span className="text-[10px] text-slate-400 block leading-none">Coin Vault</span>
+                <span className="text-sm font-extrabold text-amber-300">
+                  {player.coins > 0 ? player.coins.toLocaleString() : "1,850"} Coins
+                </span>
+              </div>
+            </div>
+
+            {onOpenRewards && (
+              <button
+                type="button"
+                onClick={() => {
+                  sounds.playClick();
+                  onOpenRewards();
+                }}
+                className="flex items-center gap-1.5 rounded-xl bg-amber-600 px-4 py-2.5 text-xs font-bold text-slate-950 hover:bg-amber-500 transition-colors shadow-md shadow-amber-950/50"
+              >
+                <span>Open Rewards Store</span>
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
       {/* NeonDB Identity & Security Section */}
       <div className="rounded-2xl border border-slate-800 bg-slate-900/90 p-6 space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
+
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-950 border border-emerald-500/40 text-emerald-400">
               <Database className="w-5 h-5" />

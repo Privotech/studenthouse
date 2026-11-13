@@ -15,6 +15,7 @@ export async function getCanonicalPlayerSummary(email: string) {
   const displayName = profile.displayName;
   const nameParts = displayName.trim().split(/\s+/);
   return {
+    username: user.username,
     display_name: displayName,
     avatar_initials:
       nameParts.length > 1
@@ -28,6 +29,8 @@ export async function getCanonicalPlayerSummary(email: string) {
     level: profile.level,
     xp: profile.totalXp,
     streak_days: profile.currentStreakDays,
+    profile_visibility: profile.profileVisibility,
+    daily_screen_time_limit_mins: profile.dailyScreenTimeLimitMins,
   };
 }
 

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { Pool, neon } from "@neondatabase/serverless";
 import { AgeZone, AccountStatus, UserRole } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
@@ -48,7 +49,22 @@ export interface DbSession {
 export interface DbAuditLog {
   id: string;
   user_id: string | null;
-  event_type: "LOGIN_SUCCESS" | "LOGIN_FAILURE" | "REGISTER" | "LOGOUT" | "PASSWORD_CHANGE" | "RATE_LIMITED";
+  event_type:
+    | "LOGIN_SUCCESS"
+    | "LOGIN_FAILURE"
+    | "REGISTER"
+    | "LOGOUT"
+    | "PASSWORD_CHANGE"
+    | "RATE_LIMITED"
+    | "SAFETY_REPORT"
+    | "USER_BLOCK"
+    | "SETTINGS_UPDATE"
+    | "SKILLQUEST_COMPLETE"
+    | "SKILLQUEST_COURSE_CREATE"
+    | "TALENT_SUBMISSION"
+    | "TALENT_JUDGE_SCORE"
+    | "ORG_TENANT_UPDATE"
+    | "SUBSCRIPTION_UPDATE";
   ip_address: string;
   details: Record<string, unknown>;
   created_at: string;
@@ -56,15 +72,20 @@ export interface DbAuditLog {
 
 const connectionString = process.env.DATABASE_URL || "";
 
-const isNeonConfigured =
+export const isNeonConfigured =
   Boolean(connectionString) &&
   !connectionString.includes("localhost") &&
   (connectionString.startsWith("postgres://") || connectionString.startsWith("postgresql://"));
+
+export function getNeonConnectionString(): string {
+  return connectionString;
+}
 
 // In-memory fallback repository for standalone testing and instant zero-downtime execution
 const fallbackUsers = new Map<string, DbUser>();
 const fallbackSessions = new Map<string, DbSession>();
 const fallbackAuditLogs: DbAuditLog[] = [];
+const fallbackBlockedEntities = new Map<string, Set<string>>();
 
 let poolInstance: Pool | null = null;
 let tablesInitialized = false;
@@ -136,6 +157,17 @@ export async function initTablesIfRemote(): Promise<void> {
       );
     `;
 
+    await sql`
+      CREATE TABLE IF NOT EXISTS np_blocked_users (
+        id TEXT PRIMARY KEY,
+        blocker_user_id TEXT NOT NULL,
+        blocked_name TEXT NOT NULL,
+        reason TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE (blocker_user_id, blocked_name)
+      );
+    `;
+
     tablesInitialized = true;
   } catch (err) {
     console.error("Failed to initialize the Neon database tables:", err);
@@ -193,11 +225,17 @@ export async function findUserById(id: string): Promise<DbUser | null> {
 }
 
 export async function createUser(user: DbUser): Promise<DbUser> {
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(user.id);
+  if (!isUuid) {
+    user.id = randomUUID();
+  }
+
   if (isNeonConfigured) {
     await initTablesIfRemote();
     await prisma.$transaction(async (transaction) => {
       const canonicalUser = await transaction.user.create({
         data: {
+          id: user.id,
           email: user.email,
           username: user.username,
           passwordHash: user.password_hash,
@@ -237,12 +275,14 @@ export async function createUser(user: DbUser): Promise<DbUser> {
           ${user.salt}, ${user.iterations}, ${user.display_name}, ${user.age},
           ${user.age_zone}, ${user.school}, ${user.state}, ${user.avatar_crest},
           ${user.avatar_initials}, ${user.role}, ${user.level}, ${user.xp},
-          ${user.streak_days}, ${user.failed_attempts}, ${user.created_at},
-          ${user.updated_at}
+          ${user.streak_days}, ${user.failed_attempts},
+          NOW(),
+          NOW()
         )
       `;
       return canonicalUser.id;
     });
+
   }
 
   fallbackUsers.set(user.id, user);
@@ -258,8 +298,9 @@ export async function createSession(session: DbSession): Promise<DbSession> {
       const sql = neon(connectionString);
       await sql`
         INSERT INTO np_sessions (id, user_id, session_token, expires_at, ip_address, user_agent, created_at)
-        VALUES (${session.id}, ${session.user_id}, ${session.session_token}, ${session.expires_at}, ${session.ip_address}, ${session.user_agent}, ${session.created_at})
+        VALUES (${session.id}, ${session.user_id}, ${session.session_token}, ${session.expires_at}::timestamptz, ${session.ip_address}, ${session.user_agent}, NOW())
       `;
+
     } catch (e) {
       console.error("Neon session creation failed:", e);
       throw e;
@@ -321,7 +362,7 @@ export async function logAuditEvent(log: Omit<DbAuditLog, "id" | "created_at">):
       const sql = neon(connectionString);
       await sql`
         INSERT INTO np_audit_logs (id, user_id, event_type, ip_address, details, created_at)
-        VALUES (${item.id}, ${item.user_id}, ${item.event_type}, ${item.ip_address}, ${JSON.stringify(item.details)}, ${item.created_at})
+        VALUES (${item.id}, ${item.user_id}, ${item.event_type}, ${item.ip_address}, ${JSON.stringify(item.details)}, NOW())
       `;
     } catch (e) {
       console.warn("Neon audit log error:", e);
@@ -390,3 +431,116 @@ export async function getDbStatus() {
     },
   };
 }
+
+export async function getAdminLiveFeed() {
+  if (!isNeonConfigured) {
+    return {
+      users: Array.from(fallbackUsers.values()).slice(0, 15).map((u) => ({
+        id: u.id,
+        email: u.email,
+        username: u.username,
+        display_name: u.display_name,
+        age: u.age,
+        age_zone: u.age_zone,
+        school: u.school,
+        state: u.state,
+        role: u.role,
+        level: u.level,
+        xp: u.xp,
+        created_at: u.created_at,
+      })),
+      auditLogs: fallbackAuditLogs.slice(-25).reverse(),
+    };
+  }
+
+  await initTablesIfRemote();
+  const sql = neon(connectionString);
+  const [users, auditLogs] = await Promise.all([
+    sql`
+      SELECT id, email, username, display_name, age, age_zone, school, state, role, level, xp, created_at
+      FROM np_users
+      ORDER BY created_at DESC
+      LIMIT 25
+    `,
+    sql`
+      SELECT id, user_id, event_type, ip_address, details, created_at
+      FROM np_audit_logs
+      ORDER BY created_at DESC
+      LIMIT 30
+    `,
+  ]);
+
+  return { users, auditLogs };
+}
+
+export async function getBlockedEntities(blockerUserId: string): Promise<string[]> {
+  if (isNeonConfigured) {
+    try {
+      await initTablesIfRemote();
+      const sql = neon(connectionString);
+      const rows = (await sql`
+        SELECT blocked_name FROM np_blocked_users
+        WHERE blocker_user_id = ${blockerUserId}
+        ORDER BY created_at DESC
+      `) as Array<{ blocked_name: string }>;
+      return rows.map((r) => r.blocked_name);
+    } catch (e) {
+      console.warn("Neon blocked list lookup error:", e);
+    }
+  }
+  return Array.from(fallbackBlockedEntities.get(blockerUserId) ?? []);
+}
+
+export async function blockEntity(
+  blockerUserId: string,
+  blockedName: string,
+  reason = "User preference"
+): Promise<string[]> {
+  const cleanName = blockedName.trim().slice(0, 80);
+  if (!cleanName) return getBlockedEntities(blockerUserId);
+
+  if (isNeonConfigured) {
+    try {
+      await initTablesIfRemote();
+      const sql = neon(connectionString);
+      await sql`
+        INSERT INTO np_blocked_users (id, blocker_user_id, blocked_name, reason, created_at)
+        VALUES (${randomUUID()}, ${blockerUserId}, ${cleanName}, ${reason}, NOW())
+        ON CONFLICT (blocker_user_id, blocked_name) DO NOTHING
+      `;
+      return getBlockedEntities(blockerUserId);
+    } catch (e) {
+      console.warn("Neon block insert error:", e);
+    }
+  }
+
+  const set = fallbackBlockedEntities.get(blockerUserId) ?? new Set<string>();
+  set.add(cleanName);
+  fallbackBlockedEntities.set(blockerUserId, set);
+  return Array.from(set);
+}
+
+export async function unblockEntity(
+  blockerUserId: string,
+  blockedName: string
+): Promise<string[]> {
+  const cleanName = blockedName.trim();
+  if (isNeonConfigured) {
+    try {
+      await initTablesIfRemote();
+      const sql = neon(connectionString);
+      await sql`
+        DELETE FROM np_blocked_users
+        WHERE blocker_user_id = ${blockerUserId} AND blocked_name = ${cleanName}
+      `;
+      return getBlockedEntities(blockerUserId);
+    } catch (e) {
+      console.warn("Neon unblock delete error:", e);
+    }
+  }
+
+  const set = fallbackBlockedEntities.get(blockerUserId);
+  if (set) set.delete(cleanName);
+  return Array.from(set ?? []);
+}
+

@@ -27,15 +27,23 @@ import {
   Image as ImageIcon,
   Check,
   ChevronDown,
+  ShieldCheck,
+  Flag,
+  Award,
 } from "lucide-react";
-import { AgeZone, CreativeSubmissionItem } from "@/types/naijaplay";
+import { AgeZone, CreativeSubmissionItem, NavTab } from "@/types/naijaplay";
 import { sounds } from "@/lib/audio";
+import type { ReportTarget } from "@/components/SafetyReportModal";
 
 interface CreativeStudioProps {
   ageZone: AgeZone;
   submissions: CreativeSubmissionItem[];
   onSubmitWork: (item: CreativeSubmissionItem) => void;
   onAwardXP: (amount: number, reason: string) => void;
+  blockedUsers?: string[];
+  onReportTarget?: (target: ReportTarget) => void;
+  isAuthenticated?: boolean;
+  onNavigateTab?: (tab: NavTab) => void;
 }
 
 type ToolType =
@@ -69,6 +77,10 @@ export const CreativeStudio: React.FC<CreativeStudioProps> = ({
   submissions,
   onSubmitWork,
   onAwardXP,
+  blockedUsers = [],
+  onReportTarget,
+  isAuthenticated = false,
+  onNavigateTab,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -104,6 +116,44 @@ export const CreativeStudio: React.FC<CreativeStudioProps> = ({
   const [publishError, setPublishError] = useState<string | null>(null);
   const [isPublishing, setIsPublishing] = useState(false);
   const [activeTab, setActiveTab] = useState<"canvas" | "gallery">("canvas");
+  const [promotedIds, setPromotedIds] = useState<Record<string, boolean>>({});
+  const [promotingId, setPromotingId] = useState<string | null>(null);
+
+  const handlePromoteToTalentArena = async (item: CreativeSubmissionItem) => {
+    if (!isAuthenticated) {
+      setPublishError("Sign in first to promote a Creative Studio work into your Talent Arena Portfolio.");
+      return;
+    }
+    setPromotingId(item.id);
+    setPublishError(null);
+    try {
+      const token = typeof window !== "undefined" ? localStorage.getItem("np_session_token") : null;
+      const res = await fetch("/api/talent-arena", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          action: "add_portfolio_item",
+          title: item.title,
+          category: "Design & Visual Arts",
+          summary: `Created in NaijaPlay Creative Studio (${item.category}).`,
+          artifactUrl: item.content.startsWith("https://")
+            ? item.content
+            : "https://naijaplay.ng/studio/showcase",
+        }),
+      });
+      if (res.ok) {
+        sounds.playCorrect();
+        setPromotedIds((prev) => ({ ...prev, [item.id]: true }));
+      }
+    } catch {
+      // silent fallback
+    } finally {
+      setPromotingId(null);
+    }
+  };
 
   // Push current canvas state to history stack
   const pushState = useCallback((actionName: string) => {
@@ -230,10 +280,22 @@ export const CreativeStudio: React.FC<CreativeStudioProps> = ({
     onAwardXP(50, "Studio Composition Exported");
   };
 
-  // Publish to community gallery
+  // Publish to community gallery with UGC Safety Pre-Screening
   const handlePublish = async () => {
     const canvas = canvasRef.current;
     if (!canvas || isPublishing) return;
+
+    const cleanTitle = (exportTitle || "Untitled Composition").trim();
+    const hasEmailOrUrl = /\S+@\S+\.\S+|https?:\/\/|www\./i.test(cleanTitle);
+    const hasPhoneDigits = /\b(?:\+?\d[\s-]?){7,13}\b/.test(cleanTitle);
+    if (hasEmailOrUrl || hasPhoneDigits) {
+      setPublishError(
+        "Safety Shield: Personal emails, phone numbers, and external links are blocked in public titles."
+      );
+      return;
+    }
+
+    const requiresModeratorReview = /(whatsapp|telegram|dm me|call me|snapchat|instagram)/i.test(cleanTitle);
 
     setIsPublishing(true);
     setPublishError(null);
@@ -246,7 +308,7 @@ export const CreativeStudio: React.FC<CreativeStudioProps> = ({
       });
       const formData = new FormData();
       formData.append("image", image, "composition.png");
-      formData.append("title", exportTitle || "Untitled Composition");
+      formData.append("title", cleanTitle);
 
       const token = typeof window !== "undefined" ? localStorage.getItem("np_session_token") : null;
       const headers: Record<string, string> = {};
@@ -273,7 +335,6 @@ export const CreativeStudio: React.FC<CreativeStudioProps> = ({
         if (resObj.authorZone) submissionZone = resObj.authorZone as AgeZone;
         if (resObj.id) submissionId = resObj.id;
       } else if (response.status === 503) {
-        // Cloudinary credentials not configured in local environment; fallback gracefully to client canvas image
         submissionAuthor = "Initiate Architect";
       } else {
         const message =
@@ -288,14 +349,14 @@ export const CreativeStudio: React.FC<CreativeStudioProps> = ({
 
       const newSubmission: CreativeSubmissionItem = {
         id: submissionId,
-        title: exportTitle || "Untitled Composition",
+        title: cleanTitle,
         author: submissionAuthor,
         authorZone: submissionZone,
         category: "Design Composition",
         content: submissionImageUrl,
         type: "image",
         likes: 1,
-        moderationStatus: "Approved",
+        moderationStatus: requiresModeratorReview ? "Pending" : "Approved",
         tags: ["DigitalArt", "Studio", "Composition"],
         createdAt: new Date().toISOString().split("T")[0]!,
       };
@@ -612,8 +673,15 @@ export const CreativeStudio: React.FC<CreativeStudioProps> = ({
               </div>
             </div>
 
-            {/* Right: Export & Publish */}
-            <div className="flex items-center gap-2">
+            {/* Right: Title, Export & Publish */}
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                type="text"
+                value={exportTitle}
+                onChange={(e) => setExportTitle(e.target.value)}
+                placeholder="Composition Title..."
+                className="rounded-lg border border-slate-800 bg-slate-900 px-2.5 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 w-40 sm:w-48"
+              />
               <button
                 onClick={() => handleExport("png")}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 transition-colors"
@@ -996,43 +1064,95 @@ export const CreativeStudio: React.FC<CreativeStudioProps> = ({
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {submissions.map((item) => (
-              <div
-                key={item.id}
-                className="rounded-2xl border border-slate-800 bg-slate-900/80 p-5 space-y-3 flex flex-col justify-between"
-              >
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between text-xs text-slate-400 font-mono">
-                    <span className="text-emerald-400 font-bold">{item.category}</span>
-                    <span>{item.createdAt}</span>
-                  </div>
-                  <h4 className="font-display text-base font-bold text-white">
-                    {item.title}
-                  </h4>
-                  {item.type === "image" &&
-                  (item.content.startsWith("data:image") ||
-                    item.content.startsWith("https://res.cloudinary.com/")) ? (
-                    <div className="rounded-xl border border-slate-800 overflow-hidden bg-slate-950 max-h-48 flex items-center justify-center">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={item.content}
-                        alt={item.title}
-                        className="w-full h-auto object-contain"
-                      />
+            {submissions
+              .filter((item) => !blockedUsers.includes(item.author))
+              .map((item) => (
+                <div
+                  key={item.id}
+                  className="rounded-2xl border border-slate-800 bg-slate-900/80 p-5 space-y-3 flex flex-col justify-between"
+                >
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-xs text-slate-400 font-mono">
+                      <span className="text-emerald-400 font-bold">{item.category}</span>
+                      <span
+                        className={`inline-flex items-center gap-1 font-semibold ${
+                          item.moderationStatus === "Pending" ? "text-amber-400" : "text-emerald-300"
+                        }`}
+                      >
+                        <ShieldCheck className="w-3 h-3" />
+                        {item.moderationStatus === "Pending" ? "Pending Review" : "Approved"}
+                      </span>
                     </div>
-                  ) : (
-                    <p className="text-xs text-slate-300 leading-relaxed line-clamp-4">
-                      {item.content}
-                    </p>
-                  )}
-                </div>
+                    <h4 className="font-display text-base font-bold text-white">
+                      {item.title}
+                    </h4>
+                    {item.type === "image" &&
+                    (item.content.startsWith("data:image") ||
+                      item.content.startsWith("https://res.cloudinary.com/")) ? (
+                      <div className="rounded-xl border border-slate-800 overflow-hidden bg-slate-950 max-h-48 flex items-center justify-center">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={item.content}
+                          alt={item.title}
+                          className="w-full h-auto object-contain"
+                        />
+                      </div>
+                    ) : (
+                      <p className="text-xs text-slate-300 leading-relaxed line-clamp-4">
+                        {item.content}
+                      </p>
+                    )}
+                  </div>
 
-                <div className="flex items-center justify-between pt-3 border-t border-slate-800 text-xs text-slate-400">
-                  <span>Author: {item.author}</span>
-                  <span className="font-mono text-emerald-400 font-bold">{item.likes} Endorsements</span>
+                  <div className="flex items-center justify-between pt-3 border-t border-slate-800 text-xs text-slate-400">
+                    <span>
+                      {item.author} · {item.createdAt}
+                    </span>
+                    <div className="flex items-center gap-2.5">
+                      <span className="font-mono text-emerald-400 font-bold">
+                        {item.likes} Endorsements
+                      </span>
+                      {promotedIds[item.id] ? (
+                        <button
+                          type="button"
+                          onClick={() => onNavigateTab?.("talent")}
+                          className="inline-flex items-center gap-1 text-[10px] font-semibold text-sky-400 hover:text-sky-300"
+                        >
+                          <Award className="w-3 h-3" />
+                          <span>In Talent Arena →</span>
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={promotingId === item.id}
+                          onClick={() => void handlePromoteToTalentArena(item)}
+                          className="inline-flex items-center gap-1 text-[10px] font-semibold text-sky-400 hover:text-sky-300 disabled:opacity-50"
+                        >
+                          <Award className="w-3 h-3" />
+                          <span>{promotingId === item.id ? "Adding..." : "To Talent Portfolio"}</span>
+                        </button>
+                      )}
+                      {onReportTarget && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            onReportTarget({
+                              targetType: "CREATIVE_SUBMISSION",
+                              targetId: item.id,
+                              targetLabel: `"${item.title}" by ${item.author}`,
+                              authorName: item.author,
+                            })
+                          }
+                          className="inline-flex items-center gap-1 text-[10px] font-semibold text-slate-400 hover:text-rose-400"
+                        >
+                          <Flag className="w-3 h-3" />
+                          <span>Report</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
           </div>
         </div>
       )}
