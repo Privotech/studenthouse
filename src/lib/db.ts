@@ -1,11 +1,8 @@
-import { Pool, neon } from "@neondatabase/serverless";
 import { AgeZone, AccountStatus, UserRole } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 
 /**
- * Neon PostgreSQL Database Client & Storage Engine
- * Supports live Neon serverless connection with automatic table bootstrapping
- * and seamless secure local fallback when DATABASE_URL is not yet provisioned.
+ * PostgreSQL database client and storage engine.
  */
 
 export interface DbUser {
@@ -66,28 +63,13 @@ const fallbackUsers = new Map<string, DbUser>();
 const fallbackSessions = new Map<string, DbSession>();
 const fallbackAuditLogs: DbAuditLog[] = [];
 
-let poolInstance: Pool | null = null;
 let tablesInitialized = false;
-
-export function getDbPool(): Pool | null {
-  if (!isNeonConfigured) return null;
-  if (!poolInstance) {
-    try {
-      poolInstance = new Pool({ connectionString });
-    } catch (err) {
-      console.warn("Failed to initialize Neon connection pool:", err);
-      return null;
-    }
-  }
-  return poolInstance;
-}
 
 export async function initTablesIfRemote(): Promise<void> {
   if (!isNeonConfigured || tablesInitialized) return;
 
   try {
-    const sql = neon(connectionString);
-    await sql`
+    await prisma.$executeRaw`
       CREATE TABLE IF NOT EXISTS np_users (
         id TEXT PRIMARY KEY,
         email TEXT UNIQUE NOT NULL,
@@ -113,7 +95,7 @@ export async function initTablesIfRemote(): Promise<void> {
       );
     `;
 
-    await sql`
+    await prisma.$executeRaw`
       CREATE TABLE IF NOT EXISTS np_sessions (
         id TEXT PRIMARY KEY,
         user_id TEXT NOT NULL REFERENCES np_users(id) ON DELETE CASCADE,
@@ -125,7 +107,7 @@ export async function initTablesIfRemote(): Promise<void> {
       );
     `;
 
-    await sql`
+    await prisma.$executeRaw`
       CREATE TABLE IF NOT EXISTS np_audit_logs (
         id TEXT PRIMARY KEY,
         user_id TEXT,
@@ -138,7 +120,7 @@ export async function initTablesIfRemote(): Promise<void> {
 
     tablesInitialized = true;
   } catch (err) {
-    console.error("Failed to initialize the Neon database tables:", err);
+    console.error("Failed to initialize the PostgreSQL auth tables:", err);
     throw err;
   }
 }
@@ -150,15 +132,14 @@ export async function findUserByEmailOrUsername(identifier: string): Promise<DbU
   if (isNeonConfigured) {
     try {
       await initTablesIfRemote();
-      const sql = neon(connectionString);
-      const rows = (await sql`
+      const rows = await prisma.$queryRaw<DbUser[]>`
         SELECT * FROM np_users 
         WHERE LOWER(email) = ${normalized} OR LOWER(username) = ${normalized}
         LIMIT 1
-      `) as DbUser[];
+      `;
       if (rows && rows.length > 0) return rows[0];
     } catch (e) {
-      console.error("Neon user lookup failed:", e);
+      console.error("PostgreSQL user lookup failed:", e);
       throw e;
     }
   }
@@ -176,15 +157,14 @@ export async function findUserById(id: string): Promise<DbUser | null> {
   if (isNeonConfigured) {
     try {
       await initTablesIfRemote();
-      const sql = neon(connectionString);
-      const rows = (await sql`
+      const rows = await prisma.$queryRaw<DbUser[]>`
         SELECT * FROM np_users 
         WHERE id = ${id}
         LIMIT 1
-      `) as DbUser[];
+      `;
       if (rows && rows.length > 0) return rows[0];
     } catch (e) {
-      console.error("Neon user lookup failed:", e);
+      console.error("PostgreSQL user lookup failed:", e);
       throw e;
     }
   }
@@ -255,13 +235,12 @@ export async function createSession(session: DbSession): Promise<DbSession> {
   if (isNeonConfigured) {
     try {
       await initTablesIfRemote();
-      const sql = neon(connectionString);
-      await sql`
+      await prisma.$executeRaw`
         INSERT INTO np_sessions (id, user_id, session_token, expires_at, ip_address, user_agent, created_at)
         VALUES (${session.id}, ${session.user_id}, ${session.session_token}, ${session.expires_at}, ${session.ip_address}, ${session.user_agent}, ${session.created_at})
       `;
     } catch (e) {
-      console.error("Neon session creation failed:", e);
+      console.error("PostgreSQL session creation failed:", e);
       throw e;
     }
   }
@@ -274,15 +253,14 @@ export async function findSession(token: string): Promise<DbSession | null> {
   if (isNeonConfigured) {
     try {
       await initTablesIfRemote();
-      const sql = neon(connectionString);
-      const rows = (await sql`
+      const rows = await prisma.$queryRaw<DbSession[]>`
         SELECT * FROM np_sessions 
         WHERE session_token = ${token} AND expires_at > NOW()
         LIMIT 1
-      `) as DbSession[];
+      `;
       if (rows && rows.length > 0) return rows[0];
     } catch (e) {
-      console.error("Neon session lookup failed:", e);
+      console.error("PostgreSQL session lookup failed:", e);
       throw e;
     }
   }
@@ -299,10 +277,9 @@ export async function findSession(token: string): Promise<DbSession | null> {
 export async function deleteSession(token: string): Promise<void> {
   if (isNeonConfigured) {
     try {
-      const sql = neon(connectionString);
-      await sql`DELETE FROM np_sessions WHERE session_token = ${token}`;
+      await prisma.$executeRaw`DELETE FROM np_sessions WHERE session_token = ${token}`;
     } catch (e) {
-      console.error("Neon session deletion failed:", e);
+      console.error("PostgreSQL session deletion failed:", e);
       throw e;
     }
   }
@@ -318,13 +295,13 @@ export async function logAuditEvent(log: Omit<DbAuditLog, "id" | "created_at">):
 
   if (isNeonConfigured) {
     try {
-      const sql = neon(connectionString);
-      await sql`
+      await initTablesIfRemote();
+      await prisma.$executeRaw`
         INSERT INTO np_audit_logs (id, user_id, event_type, ip_address, details, created_at)
         VALUES (${item.id}, ${item.user_id}, ${item.event_type}, ${item.ip_address}, ${JSON.stringify(item.details)}, ${item.created_at})
       `;
     } catch (e) {
-      console.warn("Neon audit log error:", e);
+      console.warn("PostgreSQL audit log error:", e);
     }
   }
 
@@ -377,9 +354,9 @@ export async function getDbStatus() {
   }
 
   return {
-    provider: "Neon PostgreSQL",
+    provider: "PostgreSQL",
     isConfigured: isNeonConfigured,
-    mode: isNeonConfigured ? "Neon Serverless Cluster" : "Neon Adapter Standby (Local Memory Synced)",
+    mode: isNeonConfigured ? "Remote PostgreSQL" : "PostgreSQL Standby (Local Memory)",
     ...counts,
     security: {
       pbkdf2Iterations: 100000,
