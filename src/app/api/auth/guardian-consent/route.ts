@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { consumeRateQuota } from "@/lib/auth-security";
+import { logAuditEvent } from "@/lib/db";
 import { grantGuardianConsent } from "@/lib/guardian-consent";
 import { escapeHtml, extractClientIp } from "@/lib/input-security";
 
@@ -55,6 +56,14 @@ export async function POST(request: NextRequest) {
 
     const result = await grantGuardianConsent(token);
     if (result === "GRANTED" || result === "ALREADY_GRANTED") {
+      if (result === "GRANTED") {
+        await logAuditEvent({
+          user_id: null,
+          event_type: "GUARDIAN_CONSENT",
+          ip_address: ip,
+          details: { outcome: "GRANTED" },
+        });
+      }
       return consentPage(
         "Consent recorded",
         "Guardian consent has been recorded. The player can now sign in to NaijaPlay.",

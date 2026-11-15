@@ -34,6 +34,8 @@ import {
   BookOpen,
   Award,
   CreditCard,
+  Mail,
+  Send,
 } from "lucide-react";
 import { sounds } from "@/lib/audio";
 
@@ -184,6 +186,20 @@ interface LiveFeedData {
       submittedAt: string;
     }>;
   };
+  adminNotifications?: {
+    recipientEmail: string;
+    resendConfigured: boolean;
+    recentDeliveries: Array<{
+      id: string;
+      event_type: string;
+      recipient: string;
+      subject: string;
+      status: string;
+      provider_message_id: string | null;
+      error_message: string | null;
+      created_at: string;
+    }>;
+  };
 }
 
 export default function AdminPage() {
@@ -203,6 +219,8 @@ export default function AdminPage() {
   // Live database feed
   const [liveData, setLiveData] = useState<LiveFeedData | null>(null);
   const [isLoadingFeed, setIsLoadingFeed] = useState(false);
+  const [isSendingTestEmail, setIsSendingTestEmail] = useState(false);
+  const [testEmailNotice, setTestEmailNotice] = useState<string | null>(null);
 
   // Anti-cheat state
   const [suspectSanctioned, setSuspectSanctioned] = useState(false);
@@ -304,6 +322,37 @@ export default function AdminPage() {
     setLiveData(null);
     setInputKey("");
     setErrorMsg(null);
+  };
+
+  const handleSendTestEmail = async () => {
+    sounds.playClick();
+    setIsSendingTestEmail(true);
+    setTestEmailNotice(null);
+    try {
+      const res = await fetch("/api/xadmin/data", {
+        method: "PATCH",
+        credentials: "same-origin",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.delivery) {
+        if (data.delivery.status === "SENT") {
+          setTestEmailNotice(`Live test alert emailed to ${data.delivery.recipient}.`);
+        } else if (data.delivery.status === "QUEUED_NO_RESEND_KEY") {
+          setTestEmailNotice(
+            `Activity alert queued for ${data.delivery.recipient}. Set RESEND_API_KEY in server env to deliver via email.`,
+          );
+        } else {
+          setTestEmailNotice(`Alert status (${data.delivery.status}): ${data.delivery.error_message || "Recorded in outbox."}`);
+        }
+        await fetchLiveFeed();
+      } else {
+        setTestEmailNotice(data.error || "Could not dispatch test notification.");
+      }
+    } catch {
+      setTestEmailNotice("Network error while testing admin email alert.");
+    } finally {
+      setIsSendingTestEmail(false);
+    }
   };
 
   const handleDecision = (id: string, decision: "Approved" | "Rejected") => {
@@ -1098,7 +1147,7 @@ export default function AdminPage() {
               </div>
 
               {/* Audit Logs Table */}
-              <div className="space-y-2">
+              <div className="space-y-2 mb-6">
                 <h4 className="text-xs font-bold font-mono text-slate-300">
                   Recent Audit Events ({liveData?.feed?.auditLogs?.length || 0})
                 </h4>
@@ -1132,6 +1181,93 @@ export default function AdminPage() {
                         <tr>
                           <td colSpan={4} className="px-3 py-4 text-center text-slate-500">
                             No audit logs recorded yet.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Admin Activity Email Notification Dispatch Feed */}
+              <div className="space-y-3 border-t border-slate-800 pt-5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <h4 className="text-xs font-bold font-mono text-white flex items-center gap-2">
+                      <Mail className="w-4 h-4 text-emerald-400" />
+                      Admin Activity Email Alerts ({liveData?.adminNotifications?.recipientEmail || "jeonprivileged@gmail.com"})
+                    </h4>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      Every platform activity event automatically dispatches an email alert to{" "}
+                      <span className="font-mono text-emerald-300">
+                        {liveData?.adminNotifications?.recipientEmail || "jeonprivileged@gmail.com"}
+                      </span>{" "}
+                      · Provider:{" "}
+                      <span className={liveData?.adminNotifications?.resendConfigured ? "text-emerald-400 font-semibold" : "text-amber-400 font-semibold"}>
+                        {liveData?.adminNotifications?.resendConfigured
+                          ? "Resend Live Delivery Active"
+                          : "Queued (Add RESEND_API_KEY in server env to send)"}
+                      </span>
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void handleSendTestEmail()}
+                    disabled={isSendingTestEmail}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 px-3 py-2 text-xs font-semibold text-white transition-colors shrink-0"
+                  >
+                    <Send className="w-3.5 h-3.5" />
+                    <span>{isSendingTestEmail ? "Dispatching..." : "Send Test Alert Email"}</span>
+                  </button>
+                </div>
+
+                {testEmailNotice && (
+                  <div className="rounded-lg border border-emerald-800/50 bg-emerald-950/30 px-3 py-2 text-xs text-emerald-200 font-mono">
+                    {testEmailNotice}
+                  </div>
+                )}
+
+                <div className="overflow-x-auto rounded-lg border border-slate-800">
+                  <table className="w-full text-left text-xs text-slate-300">
+                    <thead className="bg-slate-900 text-slate-400 font-mono text-[11px]">
+                      <tr>
+                        <th className="px-3 py-2">Activity Event</th>
+                        <th className="px-3 py-2">Recipient</th>
+                        <th className="px-3 py-2">Status</th>
+                        <th className="px-3 py-2">Subject</th>
+                        <th className="px-3 py-2">Timestamp</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800 font-mono text-[11px]">
+                      {liveData?.adminNotifications?.recentDeliveries &&
+                      liveData.adminNotifications.recentDeliveries.length > 0 ? (
+                        liveData.adminNotifications.recentDeliveries.map((item) => (
+                          <tr key={item.id} className="hover:bg-slate-900/50">
+                            <td className="px-3 py-2 text-white font-medium">{item.event_type}</td>
+                            <td className="px-3 py-2 text-emerald-300">{item.recipient}</td>
+                            <td className="px-3 py-2">
+                              <span
+                                className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-bold ${
+                                  item.status === "SENT"
+                                    ? "bg-emerald-950 text-emerald-400 border border-emerald-800"
+                                    : item.status === "FAILED"
+                                      ? "bg-rose-950 text-rose-400 border border-rose-800"
+                                      : "bg-amber-950 text-amber-300 border border-amber-800"
+                                }`}
+                              >
+                                {item.status}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2 text-slate-300 truncate max-w-xs">{item.subject}</td>
+                            <td className="px-3 py-2 text-slate-500">
+                              {new Date(item.created_at).toLocaleString()}
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan={5} className="px-3 py-4 text-center text-slate-500">
+                            No admin activity email dispatches recorded yet.
                           </td>
                         </tr>
                       )}

@@ -3,6 +3,7 @@ import { Pool, neon } from "@neondatabase/serverless";
 import { AgeZone, AccountStatus, UserRole } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { hashSessionToken } from "@/lib/session-crypto";
+import { notifyAdminOfActivity } from "@/lib/admin-notifications";
 
 /**
  * Neon PostgreSQL Database Client & Storage Engine
@@ -60,14 +61,26 @@ export interface DbAuditLog {
     | "SAFETY_REPORT"
     | "USER_BLOCK"
     | "SETTINGS_UPDATE"
+    | "GAME_COMPLETED"
+    | "GAME_ANOMALY"
+    | "TOURNAMENT_ENTRY"
+    | "TOURNAMENT_QUALIFIER"
     | "SKILLQUEST_COMPLETE"
+    | "SKILLQUEST_ASSIGNMENT"
     | "SKILLQUEST_COURSE_CREATE"
+    | "SKILLQUEST_CLASS_TASK"
+    | "TALENT_PROFILE_UPDATE"
+    | "TALENT_PORTFOLIO_ADD"
+    | "TALENT_COMPETITION_CREATE"
     | "TALENT_SUBMISSION"
     | "TALENT_JUDGE_SCORE"
+    | "CREATIVE_UPLOAD"
+    | "GUARDIAN_CONSENT"
     | "ORG_TENANT_UPDATE"
+    | "ORG_MEMBERSHIP_JOIN"
     | "SUBSCRIPTION_UPDATE"
-    | "GAME_ANOMALY"
-    | "ADMIN_AUTH";
+    | "ADMIN_AUTH"
+    | "ADMIN_EMAIL_TEST";
   ip_address: string;
   details: Record<string, unknown>;
   created_at: string;
@@ -387,6 +400,11 @@ export async function logAuditEvent(log: Omit<DbAuditLog, "id" | "created_at">):
   if (fallbackAuditLogs.length > 500) {
     fallbackAuditLogs.shift();
   }
+
+  // Notify platform administrator email on all recorded activity without blocking request latency
+  void notifyAdminOfActivity(item).catch((err) => {
+    console.warn("Admin activity notification dispatch failed:", err);
+  });
 }
 
 export async function getDbStatus() {

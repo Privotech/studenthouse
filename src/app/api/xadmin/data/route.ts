@@ -11,6 +11,12 @@ import {
 } from "@/lib/admin-auth";
 import { checkRateLimit, recordFailedAttempt, resetRateLimit } from "@/lib/auth-security";
 import { extractClientIp } from "@/lib/input-security";
+import {
+  getAdminNotificationEmail,
+  getRecentAdminEmailDeliveries,
+  isAdminEmailDeliveryConfigured,
+  notifyAdminOfActivity,
+} from "@/lib/admin-notifications";
 
 export async function GET(req: NextRequest) {
   if (!isAdminRequestAuthorized(req)) {
@@ -21,10 +27,11 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const [status, feed, ecosystem] = await Promise.all([
+    const [status, feed, ecosystem, recentDeliveries] = await Promise.all([
       getDbStatus(),
       getAdminLiveFeed(),
       getEcosystemAdminSnapshot(),
+      getRecentAdminEmailDeliveries(),
     ]);
 
     return NextResponse.json(
@@ -34,6 +41,11 @@ export async function GET(req: NextRequest) {
         status,
         feed,
         ecosystem,
+        adminNotifications: {
+          recipientEmail: getAdminNotificationEmail(),
+          resendConfigured: isAdminEmailDeliveryConfigured(),
+          recentDeliveries,
+        },
       },
       { headers: { "Cache-Control": "no-store, private" } },
     );
@@ -133,6 +145,34 @@ export async function POST(req: NextRequest) {
       { status: 400 },
     );
   }
+}
+
+export async function PATCH(req: NextRequest) {
+  if (!isAdminRequestAuthorized(req)) {
+    return NextResponse.json(
+      { error: "Access Denied: Invalid or missing administrator clearance session." },
+      { status: 401 },
+    );
+  }
+
+  const ip = extractClientIp(req.headers);
+  const delivery = await notifyAdminOfActivity({
+    id: `test_${Date.now()}`,
+    user_id: null,
+    event_type: "ADMIN_EMAIL_TEST",
+    ip_address: ip,
+    details: {
+      action: "manual_test_alert",
+      initiatedBy: "xadmin_console",
+      targetEmail: getAdminNotificationEmail(),
+    },
+    created_at: new Date().toISOString(),
+  });
+
+  return NextResponse.json(
+    { success: true, delivery },
+    { headers: { "Cache-Control": "no-store, private" } },
+  );
 }
 
 export async function DELETE(req: NextRequest) {

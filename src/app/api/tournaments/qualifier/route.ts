@@ -4,6 +4,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { calculatePlayerLevelFromXP } from "@naijaplay/game-engine";
 import { consumeRateQuota } from "@/lib/auth-security";
+import { logAuditEvent } from "@/lib/db";
+import { extractClientIp } from "@/lib/input-security";
 import { getPlayerProfileFromRequest } from "@/lib/player-session";
 import { prisma } from "@/lib/prisma";
 import {
@@ -245,6 +247,20 @@ export async function POST(request: NextRequest) {
         data: { totalXp: totalXP, level: progression.level },
       });
       return { totalXP, level: progression.level };
+    });
+
+    await logAuditEvent({
+      user_id: player.user.id,
+      event_type: "TOURNAMENT_QUALIFIER",
+      ip_address: extractClientIp(request.headers),
+      details: {
+        sessionId,
+        tournamentId: tournament.slug,
+        score,
+        correctAnswers,
+        awardedXP,
+        level: result.level,
+      },
     });
 
     return NextResponse.json({

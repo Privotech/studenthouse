@@ -81,7 +81,7 @@ export async function POST(request: NextRequest) {
     await logAuditEvent({
       user_id: player.user.id,
       event_type: "SAFETY_REPORT",
-      ip_address: request.headers.get("x-forwarded-for") || "unknown",
+      ip_address: extractClientIp(request.headers),
       details: { reportId: report.id, targetType, targetId, reasonCategory },
     });
 

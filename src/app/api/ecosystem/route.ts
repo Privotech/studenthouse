@@ -117,6 +117,12 @@ export async function POST(request: NextRequest) {
       if (!org) {
         return NextResponse.json({ error: "No organization matched that invite code." }, { status: 404 });
       }
+      await logAuditEvent({
+        user_id: actor.userId,
+        event_type: "ORG_MEMBERSHIP_JOIN",
+        ip_address: getClientIp(request),
+        details: { organizationId: org.id, role: parsedJoinOrg.data.role },
+      });
       return NextResponse.json({ organization: org }, { status: 201 });
     }
 

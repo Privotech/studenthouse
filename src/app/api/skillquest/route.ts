@@ -214,6 +214,17 @@ export async function POST(request: NextRequest) {
         summaryNotes: sanitizePlainText(parsedAssign.data.summaryNotes, 2000),
       });
 
+      await logAuditEvent({
+        user_id: actor.userId,
+        event_type: "SKILLQUEST_ASSIGNMENT",
+        ip_address: getClientIp(request),
+        details: {
+          assignmentId: submission.id,
+          courseId: submission.courseId,
+          projectTitle: submission.projectTitle,
+        },
+      });
+
       return NextResponse.json({ assignment: submission }, { status: 201 });
     }
 
@@ -298,6 +309,18 @@ export async function POST(request: NextRequest) {
         dueDate: data.dueDate,
         instructions: data.instructions,
         assignedBy: actor.displayName,
+      });
+
+      await logAuditEvent({
+        user_id: actor.userId,
+        event_type: "SKILLQUEST_CLASS_TASK",
+        ip_address: getClientIp(request),
+        details: {
+          taskId: task.id,
+          organizationId: membership.organizationId,
+          classLabel: data.classLabel,
+          courseId: data.courseId,
+        },
       });
 
       return NextResponse.json({ classTask: task }, { status: 201 });

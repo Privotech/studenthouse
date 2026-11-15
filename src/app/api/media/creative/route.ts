@@ -2,8 +2,8 @@ import { randomUUID } from "node:crypto";
 import { v2 as cloudinary } from "cloudinary";
 import { NextRequest, NextResponse } from "next/server";
 import { consumeRateQuota } from "@/lib/auth-security";
-import { findSession, findUserById } from "@/lib/db";
-import { sanitizePlainText } from "@/lib/input-security";
+import { findSession, findUserById, logAuditEvent } from "@/lib/db";
+import { extractClientIp, sanitizePlainText } from "@/lib/input-security";
 import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
@@ -126,6 +126,13 @@ export async function POST(request: NextRequest) {
       resource_type: "image",
       type: "authenticated",
       sign_url: true,
+    });
+
+    await logAuditEvent({
+      user_id: user.id,
+      event_type: "CREATIVE_UPLOAD",
+      ip_address: extractClientIp(request.headers),
+      details: { publicId, title: cleanTitle, authorZone: user.age_zone },
     });
 
     return NextResponse.json({

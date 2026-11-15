@@ -5,6 +5,8 @@ import { z } from "zod";
 import { calculatePlayerLevelFromXP } from "@naijaplay/game-engine";
 import { prisma } from "@/lib/prisma";
 import { getPlayerProfileFromRequest } from "@/lib/player-session";
+import { logAuditEvent } from "@/lib/db";
+import { extractClientIp } from "@/lib/input-security";
 
 const EntrySchema = z.object({
   tournamentId: z.enum(["tourn-1", "tourn-2", "tourn-3"]),
@@ -68,6 +70,19 @@ export async function POST(request: NextRequest) {
         data: { totalXp: totalXP, level: progression.level },
       });
       return { registration, totalXP, level: progression.level };
+    });
+
+    await logAuditEvent({
+      user_id: player.user.id,
+      event_type: "TOURNAMENT_ENTRY",
+      ip_address: extractClientIp(request.headers),
+      details: {
+        entryId: entryResult.registration.id,
+        tournamentId,
+        tournamentTitle: tournament.title,
+        ageZone: player.profile.ageZone,
+        awardedXP,
+      },
     });
 
     return NextResponse.json(

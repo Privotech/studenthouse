@@ -161,6 +161,12 @@ export async function POST(request: NextRequest) {
         portfolio: existing?.portfolio ?? [],
         updatedAt: new Date().toISOString(),
       });
+      await logAuditEvent({
+        user_id: actor.userId,
+        event_type: "TALENT_PROFILE_UPDATE",
+        ip_address: getClientIp(request),
+        details: { primaryCategory: parsedProfile.data.primaryCategory },
+      });
       return NextResponse.json({ profile: updated }, { status: 201 });
     }
 
@@ -197,6 +203,13 @@ export async function POST(request: NextRequest) {
         skills: existing?.skills ?? [parsedPortfolio.data.category],
         portfolio: [item, ...(existing?.portfolio ?? [])],
         updatedAt: new Date().toISOString(),
+      });
+
+      await logAuditEvent({
+        user_id: actor.userId,
+        event_type: "TALENT_PORTFOLIO_ADD",
+        ip_address: getClientIp(request),
+        details: { itemId: item.id, category: item.category, title: item.title },
       });
 
       return NextResponse.json({ profile: updated, item }, { status: 201 });
@@ -279,6 +292,17 @@ export async function POST(request: NextRequest) {
         ],
         createdByUserId: actor.userId,
         organizerName: actor.displayName,
+      });
+
+      await logAuditEvent({
+        user_id: actor.userId,
+        event_type: "TALENT_COMPETITION_CREATE",
+        ip_address: getClientIp(request),
+        details: {
+          competitionId: competition.id,
+          visibility: competition.visibility,
+          category: competition.category,
+        },
       });
 
       return NextResponse.json({ competition }, { status: 201 });

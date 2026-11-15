@@ -448,6 +448,23 @@ export async function POST(request: NextRequest) {
     const totalXP = updatedProgression.totalXP;
     const progression = { level: updatedProgression.level };
 
+    await logAuditEvent({
+      user_id: player.user.id,
+      event_type: "GAME_COMPLETED",
+      ip_address: ip,
+      details: {
+        sessionId,
+        gameSlug: slug,
+        gameTitle: session.game.title,
+        score,
+        accuracyPercent: Math.round(accuracyBasisPoints / 100),
+        difficulty,
+        mode,
+        awardedXP,
+        level: progression.level,
+      },
+    });
+
     return NextResponse.json(
       {
         score,
