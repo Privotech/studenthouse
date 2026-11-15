@@ -170,9 +170,8 @@ export const GameArena: React.FC<GameArenaProps> = ({
   const loadGameHistory = useCallback(async () => {
     if (!isAuthenticated) return;
     try {
-      const token = typeof window !== "undefined" ? localStorage.getItem("np_session_token") : null;
       const res = await fetch("/api/games/sessions", {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        credentials: "same-origin",
       });
       if (res.ok) {
         const data = await res.json();
@@ -187,9 +186,8 @@ export const GameArena: React.FC<GameArenaProps> = ({
   useEffect(() => {
     if (!isAuthenticated) return;
     let cancelled = false;
-    const token = typeof window !== "undefined" ? localStorage.getItem("np_session_token") : null;
     fetch("/api/games/sessions", {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      credentials: "same-origin",
     })
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
@@ -230,12 +228,11 @@ export const GameArena: React.FC<GameArenaProps> = ({
   // Helper to start/complete skill-game sessions on backend
   const startServerSession = useCallback(
     async (gameId: string) => {
-      const token = typeof window !== "undefined" ? localStorage.getItem("np_session_token") : null;
       const response = await fetch("/api/games/sessions", {
         method: "POST",
+        credentials: "same-origin",
         headers: {
           "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({ action: "start", gameId, difficulty, mode: gameMode }),
       });
@@ -261,12 +258,11 @@ export const GameArena: React.FC<GameArenaProps> = ({
         return null;
       }
       try {
-        const token = typeof window !== "undefined" ? localStorage.getItem("np_session_token") : null;
         const res = await fetch("/api/games/sessions", {
           method: "POST",
+          credentials: "same-origin",
           headers: {
             "Content-Type": "application/json",
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
           },
           body: JSON.stringify({
             action: "complete",
@@ -703,12 +699,11 @@ export const GameArena: React.FC<GameArenaProps> = ({
     setIsSubmittingScore(true);
     setScoreSubmissionError(null);
     try {
-      const token = typeof window !== "undefined" ? localStorage.getItem("np_session_token") : null;
       const response = await fetch("/api/games/sessions", {
         method: "POST",
+        credentials: "same-origin",
         headers: {
           "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({
           action: "complete",

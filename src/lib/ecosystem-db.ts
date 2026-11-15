@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { neon } from "@neondatabase/serverless";
 import { calculatePlayerLevelFromXP } from "@naijaplay/game-engine";
 import {
@@ -328,7 +328,7 @@ export async function createOrganizationTenant(params: {
   creatorRole: OrganizationMemberRole;
 }): Promise<OrganizationTenantItem> {
   const id = `org_${randomUUID()}`;
-  const joinCode = `${params.orgType.slice(0, 3)}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
+  const joinCode = `${params.orgType.slice(0, 3)}-${randomBytes(4).toString("hex").toUpperCase()}`;
   const planTier: SubscriptionPlanCode =
     params.orgType === "NGO" ? "NGO_PROGRAMME" : "SCHOOL_LICENSE";
   const createdAt = new Date().toISOString();

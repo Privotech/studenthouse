@@ -207,38 +207,50 @@ export default function AdminPage() {
   // Anti-cheat state
   const [suspectSanctioned, setSuspectSanctioned] = useState(false);
 
-  const fetchLiveFeed = React.useCallback(async (key: string) => {
+  const fetchLiveFeed = React.useCallback(async (): Promise<boolean> => {
     setIsLoadingFeed(true);
     try {
-      const res = await fetch(`/api/xadmin/data?key=${encodeURIComponent(key)}`, {
-        headers: { "x-admin-key": key },
+      const res = await fetch("/api/xadmin/data", {
+        credentials: "same-origin",
       });
       if (res.ok) {
         const data = await res.json();
         setLiveData(data);
+        return true;
       }
+      if (res.status === 401) {
+        setIsAuthenticated(false);
+        setLiveData(null);
+      }
+      return false;
     } catch (err) {
       console.warn("Could not fetch admin live feed:", err);
+      return false;
     } finally {
       setIsLoadingFeed(false);
     }
   }, []);
 
-  // Check stored session
+  // Probe existing HttpOnly admin session cookie on mount
   useEffect(() => {
-    const saved = typeof window !== "undefined" ? sessionStorage.getItem("np_admin_clearance") : null;
-    if (saved && saved.toUpperCase() === "PRIVOTECH") {
-      const timer = setTimeout(() => {
+    let active = true;
+    fetch("/api/xadmin/data", { credentials: "same-origin" })
+      .then(async (res) => {
+        if (!active || !res.ok) return;
+        const data = await res.json();
+        if (!active) return;
+        setLiveData(data);
         setIsAuthenticated(true);
-        void fetchLiveFeed(saved);
-      }, 0);
-      return () => clearTimeout(timer);
-    }
-  }, [fetchLiveFeed]);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const handleVerifyKey = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    const cleanKey = inputKey.trim().toUpperCase();
+    const cleanKey = inputKey.trim();
 
     if (!cleanKey) {
       setErrorMsg("Please enter the root clearance secret key.");
@@ -251,39 +263,45 @@ export default function AdminPage() {
     try {
       const res = await fetch("/api/xadmin/data", {
         method: "POST",
+        credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ secretKey: cleanKey }),
       });
 
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
 
       if (res.ok && data.authorized) {
         sounds.playCorrect();
-        sessionStorage.setItem("np_admin_clearance", cleanKey);
+        setInputKey("");
         setIsAuthenticated(true);
-        void fetchLiveFeed(cleanKey);
+        void fetchLiveFeed();
       } else {
         sounds.playClick();
-        setErrorMsg("Access Denied: Invalid root clearance key.");
+        setErrorMsg(
+          typeof data.error === "string" && data.error.length > 0
+            ? data.error
+            : "Access Denied: Invalid root clearance key.",
+        );
       }
     } catch {
-      if (cleanKey === "PRIVOTECH") {
-        sounds.playCorrect();
-        sessionStorage.setItem("np_admin_clearance", cleanKey);
-        setIsAuthenticated(true);
-        void fetchLiveFeed(cleanKey);
-      } else {
-        setErrorMsg("Network error or invalid clearance key.");
-      }
+      setErrorMsg("Unable to reach authentication server. Verify server status and retry.");
     } finally {
       setIsVerifying(false);
     }
   };
 
-  const handleLockConsole = () => {
+  const handleLockConsole = async () => {
     sounds.playClick();
-    sessionStorage.removeItem("np_admin_clearance");
+    try {
+      await fetch("/api/xadmin/data", {
+        method: "DELETE",
+        credentials: "same-origin",
+      });
+    } catch {
+      // Clear local state regardless of network hiccup
+    }
     setIsAuthenticated(false);
+    setLiveData(null);
     setInputKey("");
     setErrorMsg(null);
   };
@@ -305,8 +323,8 @@ export default function AdminPage() {
       controller: "NaijaPlay Interactive Education Ltd.",
       controllerId: "NDPC-REG-2026-0819",
       dpoEmail: "dpo@naijaplay.ng",
-      activeConsentRecordsCount: 2450,
-      activeMinorAccountsCount: 1820,
+      registeredAccountsCount: liveData?.status?.userCount ?? 0,
+      verifiedProfilesCount: liveData?.status?.profileCount ?? 0,
       ecosystemCoverage: ["NaijaPlay", "SkillQuest", "Talent Arena", "Organizations"],
       databaseStats: liveData?.status || null,
       ecosystemStats: liveData?.ecosystem?.counts || null,
@@ -475,7 +493,7 @@ export default function AdminPage() {
 
           <div className="flex items-center gap-2.5">
             <button
-              onClick={() => fetchLiveFeed(sessionStorage.getItem("np_admin_clearance") || "PRIVOTECH")}
+              onClick={() => void fetchLiveFeed()}
               title="Refresh database live metrics"
               className="flex items-center gap-1.5 rounded-lg border border-slate-800 bg-slate-900/80 px-3 py-1.5 text-xs text-slate-300 hover:text-white hover:bg-slate-800 transition-colors"
             >
@@ -1028,7 +1046,7 @@ export default function AdminPage() {
                 </div>
 
                 <button
-                  onClick={() => fetchLiveFeed(sessionStorage.getItem("np_admin_clearance") || "PRIVOTECH")}
+                  onClick={() => void fetchLiveFeed()}
                   className="flex items-center gap-1 text-xs text-slate-400 hover:text-white"
                 >
                   <RefreshCw className="w-3.5 h-3.5" />

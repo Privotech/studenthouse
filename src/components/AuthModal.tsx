@@ -106,7 +106,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   // Fetch NeonDB status on mount
   useEffect(() => {
     if (isOpen) {
-      fetch("/api/auth/status")
+      fetch("/api/auth/status", { credentials: "same-origin" })
         .then((res) => res.json())
         .then((data) => setDbStatus(data))
         .catch(() => setDbStatus(null));
@@ -126,6 +126,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     try {
       const res = await fetch("/api/auth/login", {
         method: "POST",
+        credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           identifier: loginIdentifier,
@@ -144,11 +145,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
       sounds.playCorrect();
       setSuccessMessage(data.message);
-
-      // Store session token in localStorage for client persistence
-      if (data.sessionToken) {
-        localStorage.setItem("np_session_token", data.sessionToken);
-      }
 
       setTimeout(() => {
         onAuthSuccess({
@@ -190,6 +186,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     try {
       const res = await fetch("/api/auth/register", {
         method: "POST",
+        credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           email: regEmail,
@@ -220,10 +217,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       if (data.pendingGuardianConsent) {
         setIsLoading(false);
         return;
-      }
-
-      if (data.sessionToken) {
-        localStorage.setItem("np_session_token", data.sessionToken);
       }
 
       setTimeout(() => {
@@ -713,7 +706,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             />
             <span>
               {dbStatus?.status === "online"
-                ? `PostgreSQL connected · ${dbStatus.database.userCount} accounts · ${dbStatus.database.gameSessionCount} drills`
+                ? "PostgreSQL connected · HttpOnly session protection active"
                 : "PostgreSQL unavailable · data cannot be saved"}
             </span>
           </div>

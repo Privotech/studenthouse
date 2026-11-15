@@ -288,8 +288,12 @@ export class AuthoritativeXPLedger {
     idempotencyKey: string;
     amount: number;
   }): { entry: ImmutableXPLedgerEntry; status: PlayerLevelStatus } {
+    const idSuffix =
+      typeof globalThis.crypto?.randomUUID === "function"
+        ? globalThis.crypto.randomUUID().slice(0, 12)
+        : Date.now().toString(36);
     const newEntry: ImmutableXPLedgerEntry = {
-      id: `xp_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
+      id: `xp_${idSuffix}`,
       playerId: input.playerId,
       source: input.source,
       referenceId: input.referenceId,

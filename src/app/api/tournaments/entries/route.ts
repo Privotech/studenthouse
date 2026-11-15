@@ -35,9 +35,7 @@ export async function POST(request: NextRequest) {
     }
 
     const awardedXP = 50;
-    const totalXP = player.profile.totalXp + awardedXP;
-    const progression = calculatePlayerLevelFromXP(totalXP);
-    const entry = await prisma.$transaction(async (transaction) => {
+    const entryResult = await prisma.$transaction(async (transaction) => {
       const registration = await transaction.tournamentEntry.create({
         data: {
           tournamentId: tournament.id,
@@ -54,15 +52,32 @@ export async function POST(request: NextRequest) {
           ${`tournament-entry-${tournament.id}-${player.profile.id}`}, ${awardedXP}
         )
       `;
+      await transaction.$queryRaw`
+        SELECT id FROM "PlayerProfile"
+        WHERE id = ${player.profile.id}::uuid
+        FOR UPDATE
+      `;
+      const freshProfile = await transaction.playerProfile.findUniqueOrThrow({
+        where: { id: player.profile.id },
+        select: { totalXp: true },
+      });
+      const totalXP = freshProfile.totalXp + awardedXP;
+      const progression = calculatePlayerLevelFromXP(totalXP);
       await transaction.playerProfile.update({
         where: { id: player.profile.id },
         data: { totalXp: totalXP, level: progression.level },
       });
-      return registration;
+      return { registration, totalXP, level: progression.level };
     });
 
     return NextResponse.json(
-      { entry, tournamentId, awardedXP, totalXP, level: progression.level },
+      {
+        entry: entryResult.registration,
+        tournamentId,
+        awardedXP,
+        totalXP: entryResult.totalXP,
+        level: entryResult.level,
+      },
       { status: 201 },
     );
   } catch (error) {

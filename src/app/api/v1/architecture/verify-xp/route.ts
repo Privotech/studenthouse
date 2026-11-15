@@ -13,6 +13,8 @@ import {
   AuthoritativeXPLedger,
   verifyGameScoreSubmission,
 } from "@naijaplay/game-engine";
+import { consumeRateQuota } from "@/lib/auth-security";
+import { extractClientIp } from "@/lib/input-security";
 
 // Server-side singleton ledger instance for verifying idempotency & duplicate mission prevention
 const serverVerificationLedger = new AuthoritativeXPLedger([
@@ -53,6 +55,10 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
+    const quota = consumeRateQuota(`arch_xp_${extractClientIp(req.headers)}`, 60);
+    if (!quota.allowed) {
+      return NextResponse.json({ error: "Rate limit exceeded." }, { status: 429 });
+    }
     const rawBody = await req.json();
     const mode = rawBody?.mode as "GAME_SCORE" | "MISSION_REWARD" | undefined;
 

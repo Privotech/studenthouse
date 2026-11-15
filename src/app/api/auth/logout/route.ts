@@ -1,16 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { deleteSession, logAuditEvent } from "@/lib/db";
+import { extractClientIp } from "@/lib/input-security";
 
 export async function POST(req: NextRequest) {
   try {
     const authHeader = req.headers.get("authorization");
     const cookieToken = req.cookies.get("np_session")?.value;
-    
+
     let token = "";
-    if (authHeader && authHeader.startsWith("Bearer ")) {
-      token = authHeader.substring(7).trim();
-    } else if (cookieToken) {
+    if (cookieToken) {
       token = cookieToken.trim();
+    } else if (authHeader && authHeader.startsWith("Bearer ")) {
+      token = authHeader.substring(7).trim();
     }
 
     if (token) {
@@ -18,8 +19,8 @@ export async function POST(req: NextRequest) {
       await logAuditEvent({
         user_id: null,
         event_type: "LOGOUT",
-        ip_address: req.headers.get("x-forwarded-for") || "127.0.0.1",
-        details: { tokenPreview: token.substring(0, 8) + "..." },
+        ip_address: extractClientIp(req.headers),
+        details: { action: "user_logout" },
       });
     }
 
@@ -28,7 +29,14 @@ export async function POST(req: NextRequest) {
       message: "Signed out successfully.",
     });
 
-    response.cookies.delete("np_session");
+    response.cookies.set("np_session", "", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 0,
+      expires: new Date(0),
+      path: "/",
+    });
     return response;
   } catch (err) {
     console.error("Logout error:", err);

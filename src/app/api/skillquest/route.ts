@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { COMPREHENSIVE_COURSES } from "@/data/mockData";
@@ -5,8 +6,10 @@ import {
   COURSE_PRACTICAL_PROMPTS,
   SKILLQUEST_LEARNING_PATHS,
 } from "@/data/ecosystemData";
+import { consumeRateQuota } from "@/lib/auth-security";
 import { logAuditEvent } from "@/lib/db";
 import { getAuthenticatedActor, getClientIp } from "@/lib/ecosystem-auth";
+import { sanitizePlainText, sanitizeSafeHttpUrl } from "@/lib/input-security";
 import {
   createClassTaskAssignment,
   createCustomInstructorCourse,
@@ -116,6 +119,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const quota = consumeRateQuota(`sq_post_${actor.userId}`, 30);
+    if (!quota.allowed) {
+      return NextResponse.json(
+        { error: "Too many SkillQuest submissions. Please wait a few minutes." },
+        { status: 429 },
+      );
+    }
+
     const body: unknown = await request.json();
 
     // 1. Server-verified Course Examination Grading
@@ -191,12 +202,16 @@ export async function POST(request: NextRequest) {
     // 2. Practical Project / Assignment Submission
     const parsedAssign = AssignmentSubmitSchema.safeParse(body);
     if (parsedAssign.success) {
+      const urlCheck = sanitizeSafeHttpUrl(parsedAssign.data.artifactUrl);
+      if (!urlCheck.valid) {
+        return NextResponse.json({ error: urlCheck.error }, { status: 400 });
+      }
       const submission = await createSkillQuestAssignment({
         userId: actor.userId,
         courseId: parsedAssign.data.courseId,
-        projectTitle: parsedAssign.data.projectTitle,
-        artifactUrl: parsedAssign.data.artifactUrl,
-        summaryNotes: parsedAssign.data.summaryNotes,
+        projectTitle: sanitizePlainText(parsedAssign.data.projectTitle, 140),
+        artifactUrl: urlCheck.value,
+        summaryNotes: sanitizePlainText(parsedAssign.data.summaryNotes, 2000),
       });
 
       return NextResponse.json({ assignment: submission }, { status: 201 });
@@ -225,21 +240,26 @@ export async function POST(request: NextRequest) {
         authorUserId: actor.userId,
         organizationId: verifiedOrgId,
         authorName: actor.displayName,
-        title: data.title,
+        title: sanitizePlainText(data.title, 120),
         category: data.category,
         level: data.level,
         targetZone: data.targetZone,
-        overview: data.overview,
-        practicalPrompt: data.practicalPrompt,
+        overview: sanitizePlainText(data.overview, 800),
+        practicalPrompt: sanitizePlainText(data.practicalPrompt, 500),
         xpReward: 160,
-        sections: [{ title: data.sectionTitle, body: data.sectionBody }],
+        sections: [
+          {
+            title: sanitizePlainText(data.sectionTitle, 120),
+            body: sanitizePlainText(data.sectionBody, 2500),
+          },
+        ],
         quiz: [
           {
-            id: `sq-q-${Date.now()}`,
-            question: data.quizQuestion,
-            options: data.quizOptions,
+            id: `sq-q-${randomUUID().slice(0, 8)}`,
+            question: sanitizePlainText(data.quizQuestion, 300),
+            options: data.quizOptions.map((o) => sanitizePlainText(o, 160)),
             correctAnswer: Math.min(data.quizCorrectIndex, data.quizOptions.length - 1),
-            explanation: data.quizExplanation,
+            explanation: sanitizePlainText(data.quizExplanation, 400),
           },
         ],
       });

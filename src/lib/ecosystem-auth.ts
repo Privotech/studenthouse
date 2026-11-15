@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { DbUser, findSession, findUserById } from "@/lib/db";
+import { extractClientIp } from "@/lib/input-security";
 import { prisma } from "@/lib/prisma";
 
 export interface AuthenticatedActor {
@@ -37,12 +38,7 @@ export async function getAuthenticatedActor(
       where: { email: appUser.email },
       include: { playerProfile: { select: { id: true } } },
     });
-    if (
-      canonical &&
-      (canonical.accountStatus === "SUSPENDED" ||
-        canonical.accountStatus === "DEACTIVATED" ||
-        canonical.accountStatus === "RESTRICTED")
-    ) {
+    if (canonical && canonical.accountStatus !== "ACTIVE") {
       return null;
     }
     playerProfileId = canonical?.playerProfile?.id;
@@ -65,9 +61,5 @@ export async function getAuthenticatedActor(
 }
 
 export function getClientIp(request: NextRequest): string {
-  return (
-    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-    request.headers.get("x-real-ip") ||
-    "unknown"
-  );
+  return extractClientIp(request.headers);
 }

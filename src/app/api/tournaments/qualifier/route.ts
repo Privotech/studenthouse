@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { calculatePlayerLevelFromXP } from "@naijaplay/game-engine";
+import { consumeRateQuota } from "@/lib/auth-security";
 import { getPlayerProfileFromRequest } from "@/lib/player-session";
 import { prisma } from "@/lib/prisma";
 import {
@@ -26,6 +27,14 @@ export async function POST(request: NextRequest) {
     const player = await getPlayerProfileFromRequest(request);
     if (!player) {
       return NextResponse.json({ error: "Sign in to take a saved tournament qualifier." }, { status: 401 });
+    }
+
+    const quota = consumeRateQuota(`qualifier_${player.user.id}`, 15);
+    if (!quota.allowed) {
+      return NextResponse.json(
+        { error: "Too many qualifier requests in a short window. Please try again later." },
+        { status: 429 },
+      );
     }
 
     const body: unknown = await request.json();

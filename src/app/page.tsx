@@ -75,15 +75,12 @@ export default function NaijaPlayApp() {
     }, 3500);
   }, []);
 
-  const refreshAuthenticatedData = useCallback(async (token?: string | null) => {
-    const authHeaders: Record<string, string> = token
-      ? { Authorization: `Bearer ${token}` }
-      : {};
+  const refreshAuthenticatedData = useCallback(async () => {
     try {
       const [sessionsRes, notifRes, blockRes] = await Promise.all([
-        fetch("/api/games/sessions", { headers: authHeaders }),
-        fetch("/api/notifications", { headers: authHeaders }),
-        fetch("/api/safety/block", { headers: authHeaders }),
+        fetch("/api/games/sessions", { credentials: "same-origin" }),
+        fetch("/api/notifications", { credentials: "same-origin" }),
+        fetch("/api/safety/block", { credentials: "same-origin" }),
       ]);
 
       if (sessionsRes.ok) {
@@ -116,46 +113,41 @@ export default function NaijaPlayApp() {
     }
   }, []);
 
-  // Restore authenticated session and load persisted player telemetry
+  // Restore authenticated session via HttpOnly cookie and load persisted player telemetry
   useEffect(() => {
-    const token = typeof window !== "undefined" ? localStorage.getItem("np_session_token") : null;
     const savedMinsRaw = typeof window !== "undefined" ? localStorage.getItem(getScreenTimeStorageKey()) : null;
     const savedMins = savedMinsRaw ? Number(savedMinsRaw) : 0;
 
-    if (token) {
-      fetch("/api/auth/me", {
-        headers: { Authorization: `Bearer ${token}` },
+    fetch("/api/auth/me", { credentials: "same-origin" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.authenticated && data.user) {
+          setIsAuthenticated(true);
+          setUserEmail(data.user.email);
+          const userZone: AgeZone = data.user.age_zone || "TEEN";
+          setPlayer((prev) => ({
+            ...prev,
+            username: data.user.username,
+            displayName: data.user.display_name,
+            avatarInitials: data.user.avatar_initials,
+            avatarCrest: data.user.avatar_crest,
+            ageZone: userZone,
+            age: data.user.age,
+            level: data.user.level,
+            xp: data.user.xp,
+            streakDays: data.user.streak_days,
+            school: data.user.school,
+            state: data.user.state,
+            profileVisibility: data.user.profile_visibility || "SCHOOL_AND_CLUB_ONLY",
+            maxScreenTimeMinutes: data.user.daily_screen_time_limit_mins || prev.maxScreenTimeMinutes,
+            screenTimeTodayMinutes: Number.isFinite(savedMins) && savedMins > 0 ? savedMins : prev.screenTimeTodayMinutes,
+          }));
+          setMissions(getMissionsForZone(userZone));
+          setWeeklyChallenges(getWeeklyChallengesForZone(userZone));
+          void refreshAuthenticatedData();
+        }
       })
-        .then((res) => res.json())
-        .then((data) => {
-          if (data.authenticated && data.user) {
-            setIsAuthenticated(true);
-            setUserEmail(data.user.email);
-            const userZone: AgeZone = data.user.age_zone || "TEEN";
-            setPlayer((prev) => ({
-              ...prev,
-              username: data.user.username,
-              displayName: data.user.display_name,
-              avatarInitials: data.user.avatar_initials,
-              avatarCrest: data.user.avatar_crest,
-              ageZone: userZone,
-              age: data.user.age,
-              level: data.user.level,
-              xp: data.user.xp,
-              streakDays: data.user.streak_days,
-              school: data.user.school,
-              state: data.user.state,
-              profileVisibility: data.user.profile_visibility || "SCHOOL_AND_CLUB_ONLY",
-              maxScreenTimeMinutes: data.user.daily_screen_time_limit_mins || prev.maxScreenTimeMinutes,
-              screenTimeTodayMinutes: Number.isFinite(savedMins) && savedMins > 0 ? savedMins : prev.screenTimeTodayMinutes,
-            }));
-            setMissions(getMissionsForZone(userZone));
-            setWeeklyChallenges(getWeeklyChallengesForZone(userZone));
-            void refreshAuthenticatedData(token);
-          }
-        })
-        .catch(() => {});
-    }
+      .catch(() => {});
   }, [refreshAuthenticatedData]);
 
   // Active screen-time tracker (1 minute tick when signed in)
@@ -184,22 +176,17 @@ export default function NaijaPlayApp() {
     }));
     setMissions(getMissionsForZone(assignedZone));
     setWeeklyChallenges(getWeeklyChallengesForZone(assignedZone));
-    const token = typeof window !== "undefined" ? localStorage.getItem("np_session_token") : null;
-    void refreshAuthenticatedData(token);
+    void refreshAuthenticatedData();
     sounds.playLevelUp();
     showToast(`Welcome ${userData.displayName || userData.username}! Calibrated game tasks loaded for ${assignedZone} zone.`);
   };
 
   const handleSignOut = async () => {
     try {
-      const token = typeof window !== "undefined" ? localStorage.getItem("np_session_token") : null;
       await fetch("/api/auth/logout", {
         method: "POST",
-        headers: { Authorization: token ? `Bearer ${token}` : "" },
+        credentials: "same-origin",
       });
-      if (typeof window !== "undefined") {
-        localStorage.removeItem("np_session_token");
-      }
     } catch {}
 
     setIsAuthenticated(false);
@@ -220,12 +207,11 @@ export default function NaijaPlayApp() {
   const persistPlayerSettings = async (payload: Record<string, unknown>) => {
     if (!isAuthenticated) return;
     try {
-      const token = typeof window !== "undefined" ? localStorage.getItem("np_session_token") : null;
       await fetch("/api/player/settings", {
         method: "PATCH",
+        credentials: "same-origin",
         headers: {
           "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify(payload),
       });
@@ -398,12 +384,11 @@ export default function NaijaPlayApp() {
     setBlockedUsers(next);
     setPlayer((prev) => ({ ...prev, blockedUsers: next }));
     if (isAuthenticated) {
-      const token = typeof window !== "undefined" ? localStorage.getItem("np_session_token") : null;
       await fetch("/api/safety/block", {
         method: "POST",
+        credentials: "same-origin",
         headers: {
           "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({ targetName }),
       });
@@ -416,10 +401,11 @@ export default function NaijaPlayApp() {
     setBlockedUsers(next);
     setPlayer((prev) => ({ ...prev, blockedUsers: next }));
     if (isAuthenticated) {
-      const token = typeof window !== "undefined" ? localStorage.getItem("np_session_token") : null;
-      await fetch(`/api/safety/block?targetName=${encodeURIComponent(targetName)}`, {
+      await fetch("/api/safety/block", {
         method: "DELETE",
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ targetName }),
       });
     }
     showToast(`${targetName} unblocked.`);
@@ -429,14 +415,13 @@ export default function NaijaPlayApp() {
     const nowIso = new Date().toISOString();
     setNotifications((prev) => prev.map((n) => ({ ...n, readAt: n.readAt || nowIso })));
     if (isAuthenticated) {
-      const token = typeof window !== "undefined" ? localStorage.getItem("np_session_token") : null;
       await fetch("/api/notifications", {
         method: "PATCH",
+        credentials: "same-origin",
         headers: {
           "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify({ markAll: true }),
+        body: JSON.stringify({ markAllRead: true }),
       }).catch(() => {});
     }
   };
@@ -571,8 +556,7 @@ export default function NaijaPlayApp() {
               setIsAuthOpen(true);
             }}
             onGameCompleted={() => {
-              const token = typeof window !== "undefined" ? localStorage.getItem("np_session_token") : null;
-              void refreshAuthenticatedData(token);
+              void refreshAuthenticatedData();
             }}
           />
         )}

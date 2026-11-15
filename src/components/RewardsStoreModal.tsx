@@ -44,7 +44,7 @@ export const RewardsStoreModal: React.FC<RewardsStoreModalProps> = ({
   const [countryFilter, setCountryFilter] = useState<"ALL" | "NG" | "GH" | "KE" | "ZA">("ALL");
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState<"store" | "vault">("store");
-  const [userCoins, setUserCoins] = useState(player.coins > 0 ? player.coins : 1850); // Default scholarship grant for testing
+  const [userCoins, setUserCoins] = useState(player.coins);
   const [myVouchers, setMyVouchers] = useState<RedeemedVoucher[]>([
     {
       id: "vouch-init-1",
@@ -117,7 +117,7 @@ export const RewardsStoreModal: React.FC<RewardsStoreModalProps> = ({
       }
 
       sounds.playTrophy();
-      const randomSuffix = Math.random().toString(36).substring(2, 6).toUpperCase();
+      const randomSuffix = globalThis.crypto.randomUUID().slice(0, 6).toUpperCase();
       const prefix = selectedReward.provider.toUpperCase().replace(/\s+/g, "");
       const generatedVoucherCode = `NP-${prefix}-${Date.now().toString().slice(-4)}-${randomSuffix}`;
       setRedeemedCode(generatedVoucherCode);

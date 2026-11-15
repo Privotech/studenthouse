@@ -4,7 +4,9 @@ import { z } from "zod";
 import { ReportReasonCategory } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getPlayerProfileFromRequest } from "@/lib/player-session";
+import { consumeRateQuota } from "@/lib/auth-security";
 import { logAuditEvent } from "@/lib/db";
+import { extractClientIp, sanitizePlainText } from "@/lib/input-security";
 
 const ReportSchema = z.object({
   targetType: z.enum(["CREATIVE_SUBMISSION", "LEADERBOARD_PLAYER", "CLUB_MEMBER", "GENERAL"]),
@@ -32,6 +34,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Sign in to submit a safety report." }, { status: 401 });
     }
 
+    const quota = consumeRateQuota(`report_${player.user.id}`, 15);
+    if (!quota.allowed) {
+      return NextResponse.json(
+        { error: "Too many safety reports submitted recently. Please wait briefly." },
+        { status: 429 },
+      );
+    }
+
     const body: unknown = await request.json();
     const parsed = ReportSchema.safeParse(body);
     if (!parsed.success) {
@@ -42,6 +52,8 @@ export async function POST(request: NextRequest) {
     }
 
     const { targetType, targetId, targetLabel, reasonCategory, details } = parsed.data;
+    const cleanDetails = sanitizePlainText(details, 400);
+    const cleanLabel = targetLabel ? sanitizePlainText(targetLabel, 120) : sanitizePlainText(targetId, 120);
     const uuidTarget = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(targetId)
       ? targetId
       : deterministicUuid(`${targetType}:${targetId}`);
@@ -52,7 +64,7 @@ export async function POST(request: NextRequest) {
         targetType,
         targetId: uuidTarget,
         reasonCategory: reasonCategory as ReportReasonCategory,
-        details: `[${targetLabel || targetId}] ${details}`.slice(0, 500),
+        details: `[${cleanLabel}] ${cleanDetails}`.slice(0, 500),
       },
       select: { id: true, status: true, createdAt: true },
     });

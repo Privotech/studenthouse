@@ -155,10 +155,8 @@ export const SkillQuestPortal: React.FC<SkillQuestPortalProps> = ({
 
   useEffect(() => {
     let cancelled = false;
-    const token =
-      typeof window !== "undefined" ? localStorage.getItem("np_session_token") : null;
     fetch("/api/skillquest", {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      credentials: "same-origin",
     })
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
@@ -341,17 +339,15 @@ export const SkillQuestPortal: React.FC<SkillQuestPortalProps> = ({
 
     let finalPercent = localPercent;
     let finalGrade = localGrade;
-    let certId = `SQ-2026-${activeCourse.id.toUpperCase()}-${Math.floor(1000 + Math.random() * 9000)}`;
+    let certId = `SQ-2026-${activeCourse.id.toUpperCase()}-${globalThis.crypto.randomUUID().slice(0, 4).toUpperCase()}`;
 
     if (isAuthenticated) {
       try {
-        const token =
-          typeof window !== "undefined" ? localStorage.getItem("np_session_token") : null;
         const res = await fetch("/api/skillquest", {
           method: "POST",
+          credentials: "same-origin",
           headers: {
             "Content-Type": "application/json",
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
           },
           body: JSON.stringify({
             action: "complete_exam",
@@ -418,13 +414,11 @@ export const SkillQuestPortal: React.FC<SkillQuestPortalProps> = ({
     setIsSubmittingProject(true);
     setProjectFeedback(null);
     try {
-      const token =
-        typeof window !== "undefined" ? localStorage.getItem("np_session_token") : null;
       const res = await fetch("/api/skillquest", {
         method: "POST",
+        credentials: "same-origin",
         headers: {
           "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({
           action: "submit_assignment",
@@ -460,13 +454,11 @@ export const SkillQuestPortal: React.FC<SkillQuestPortalProps> = ({
     }
     setAuthorFeedback(null);
     try {
-      const token =
-        typeof window !== "undefined" ? localStorage.getItem("np_session_token") : null;
       const res = await fetch("/api/skillquest", {
         method: "POST",
+        credentials: "same-origin",
         headers: {
           "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({
           action: "create_course",
@@ -516,13 +508,11 @@ export const SkillQuestPortal: React.FC<SkillQuestPortalProps> = ({
     setClassroomFeedback(null);
     const chosenCourse = allCourses.find((c) => c.id === taskCourseId);
     try {
-      const token =
-        typeof window !== "undefined" ? localStorage.getItem("np_session_token") : null;
       const res = await fetch("/api/skillquest", {
         method: "POST",
+        credentials: "same-origin",
         headers: {
           "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({
           action: "assign_class_task",

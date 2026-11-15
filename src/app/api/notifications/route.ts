@@ -5,8 +5,9 @@ import { getPlayerProfileFromRequest } from "@/lib/player-session";
 import { DEFAULT_ANNOUNCEMENTS } from "@/data/mockData";
 
 const PatchSchema = z.object({
-  notificationId: z.string().optional(),
+  notificationId: z.string().uuid().optional(),
   markAllRead: z.boolean().optional(),
+  markAll: z.boolean().optional(),
 });
 
 export async function GET(request: NextRequest) {
@@ -64,13 +65,13 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: "Invalid notification payload." }, { status: 400 });
     }
 
-    const { notificationId, markAllRead } = parsed.data;
-    if (markAllRead) {
+    const { notificationId, markAllRead, markAll } = parsed.data;
+    if (markAllRead || markAll) {
       await prisma.notification.updateMany({
         where: { userId: player.user.id, readAt: null },
         data: { readAt: new Date() },
       });
-    } else if (notificationId && !notificationId.startsWith("ann-")) {
+    } else if (notificationId) {
       await prisma.notification.updateMany({
         where: { id: notificationId, userId: player.user.id },
         data: { readAt: new Date() },

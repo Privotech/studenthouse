@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Pool, neon } from "@neondatabase/serverless";
 import { AgeZone, AccountStatus, UserRole } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { hashSessionToken } from "@/lib/session-crypto";
 
 /**
  * Neon PostgreSQL Database Client & Storage Engine
@@ -64,7 +65,9 @@ export interface DbAuditLog {
     | "TALENT_SUBMISSION"
     | "TALENT_JUDGE_SCORE"
     | "ORG_TENANT_UPDATE"
-    | "SUBSCRIPTION_UPDATE";
+    | "SUBSCRIPTION_UPDATE"
+    | "GAME_ANOMALY"
+    | "ADMIN_AUTH";
   ip_address: string;
   details: Record<string, unknown>;
   created_at: string;
@@ -292,33 +295,42 @@ export async function createUser(user: DbUser): Promise<DbUser> {
 }
 
 export async function createSession(session: DbSession): Promise<DbSession> {
+  const hashedToken = hashSessionToken(session.session_token);
+  const storedSession: DbSession = {
+    ...session,
+    id: /^[0-9a-f-]{36}$/i.test(session.id) ? session.id : randomUUID(),
+    session_token: hashedToken,
+  };
+
   if (isNeonConfigured) {
     try {
       await initTablesIfRemote();
       const sql = neon(connectionString);
       await sql`
         INSERT INTO np_sessions (id, user_id, session_token, expires_at, ip_address, user_agent, created_at)
-        VALUES (${session.id}, ${session.user_id}, ${session.session_token}, ${session.expires_at}::timestamptz, ${session.ip_address}, ${session.user_agent}, NOW())
+        VALUES (${storedSession.id}, ${storedSession.user_id}, ${storedSession.session_token}, ${storedSession.expires_at}::timestamptz, ${storedSession.ip_address}, ${storedSession.user_agent}, NOW())
       `;
-
     } catch (e) {
       console.error("Neon session creation failed:", e);
       throw e;
     }
   }
 
-  fallbackSessions.set(session.session_token, session);
-  return session;
+  fallbackSessions.set(hashedToken, storedSession);
+  return storedSession;
 }
 
 export async function findSession(token: string): Promise<DbSession | null> {
+  if (!token || token.length < 16) return null;
+  const hashedToken = hashSessionToken(token);
+
   if (isNeonConfigured) {
     try {
       await initTablesIfRemote();
       const sql = neon(connectionString);
       const rows = (await sql`
         SELECT * FROM np_sessions 
-        WHERE session_token = ${token} AND expires_at > NOW()
+        WHERE session_token = ${hashedToken} AND expires_at > NOW()
         LIMIT 1
       `) as DbSession[];
       if (rows && rows.length > 0) return rows[0];
@@ -328,31 +340,33 @@ export async function findSession(token: string): Promise<DbSession | null> {
     }
   }
 
-  const s = fallbackSessions.get(token);
+  const s = fallbackSessions.get(hashedToken);
   if (!s) return null;
   if (new Date(s.expires_at).getTime() < Date.now()) {
-    fallbackSessions.delete(token);
+    fallbackSessions.delete(hashedToken);
     return null;
   }
   return s;
 }
 
 export async function deleteSession(token: string): Promise<void> {
+  if (!token) return;
+  const hashedToken = hashSessionToken(token);
   if (isNeonConfigured) {
     try {
       const sql = neon(connectionString);
-      await sql`DELETE FROM np_sessions WHERE session_token = ${token}`;
+      await sql`DELETE FROM np_sessions WHERE session_token = ${hashedToken} OR expires_at <= NOW()`;
     } catch (e) {
       console.error("Neon session deletion failed:", e);
       throw e;
     }
   }
-  fallbackSessions.delete(token);
+  fallbackSessions.delete(hashedToken);
 }
 
 export async function logAuditEvent(log: Omit<DbAuditLog, "id" | "created_at">): Promise<void> {
   const item: DbAuditLog = {
-    id: `log_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+    id: `log_${randomUUID()}`,
     ...log,
     created_at: new Date().toISOString(),
   };

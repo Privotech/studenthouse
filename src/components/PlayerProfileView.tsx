@@ -82,13 +82,11 @@ export const PlayerProfileView: React.FC<PlayerProfileViewProps> = ({
 
   useEffect(() => {
     let cancelled = false;
-    const token = typeof window !== "undefined" ? localStorage.getItem("np_session_token") : null;
-    const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
 
     Promise.all([
-      fetch("/api/ecosystem", { headers }).then((r) => (r.ok ? r.json() : null)),
-      fetch("/api/skillquest", { headers }).then((r) => (r.ok ? r.json() : null)),
-      fetch("/api/talent-arena", { headers }).then((r) => (r.ok ? r.json() : null)),
+      fetch("/api/ecosystem", { credentials: "same-origin" }).then((r) => (r.ok ? r.json() : null)),
+      fetch("/api/skillquest", { credentials: "same-origin" }).then((r) => (r.ok ? r.json() : null)),
+      fetch("/api/talent-arena", { credentials: "same-origin" }).then((r) => (r.ok ? r.json() : null)),
     ])
       .then(([eco, sq, ta]) => {
         if (cancelled) return;
@@ -614,7 +612,7 @@ export const PlayerProfileView: React.FC<PlayerProfileViewProps> = ({
               <div className="text-right">
                 <span className="text-[10px] text-slate-400 block leading-none">Coin Vault</span>
                 <span className="text-sm font-extrabold text-amber-300">
-                  {player.coins > 0 ? player.coins.toLocaleString() : "1,850"} Coins
+                  {player.coins.toLocaleString()} Coins
                 </span>
               </div>
             </div>

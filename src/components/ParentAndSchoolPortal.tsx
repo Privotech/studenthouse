@@ -62,12 +62,10 @@ export const ParentAndSchoolPortal: React.FC<ParentAndSchoolPortalProps> = ({
 
   useEffect(() => {
     let cancelled = false;
-    const token = typeof window !== "undefined" ? localStorage.getItem("np_session_token") : null;
-    const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
 
     Promise.all([
-      fetch("/api/ecosystem", { headers }).then((r) => (r.ok ? r.json() : null)),
-      fetch("/api/skillquest", { headers }).then((r) => (r.ok ? r.json() : null)),
+      fetch("/api/ecosystem", { credentials: "same-origin" }).then((r) => (r.ok ? r.json() : null)),
+      fetch("/api/skillquest", { credentials: "same-origin" }).then((r) => (r.ok ? r.json() : null)),
     ])
       .then(([eco, sq]) => {
         if (cancelled) return;

@@ -1,8 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { consumeRateQuota } from "@/lib/auth-security";
 import { logAuditEvent } from "@/lib/db";
 import { getAuthenticatedActor, getClientIp } from "@/lib/ecosystem-auth";
+import { sanitizePlainText, sanitizeSafeHttpUrl } from "@/lib/input-security";
 import {
   createTalentCompetition,
   createTalentSubmission,
@@ -85,13 +87,29 @@ export async function GET(request: NextRequest) {
     const submissions = await listTalentSubmissions(allowedIds);
     const myProfile = actor ? profiles.find((p) => p.userId === actor.userId) ?? null : null;
 
+    const safeProfiles = actor
+      ? profiles
+      : profiles.map((p) =>
+          p.ageZone === "JUNIOR"
+            ? { ...p, school: "Protected School", username: "junior-creator" }
+            : p,
+        );
+
+    const safeSubmissions = actor
+      ? submissions
+      : submissions.map((s) =>
+          s.participantZone === "JUNIOR"
+            ? { ...s, schoolName: "Protected School" }
+            : s,
+        );
+
     return NextResponse.json(
       {
         authenticated: Boolean(actor),
         myProfile,
-        profiles,
+        profiles: safeProfiles,
         competitions,
-        submissions,
+        submissions: safeSubmissions,
         organizations: orgs,
       },
       { headers: { "Cache-Control": "no-store, private" } },
@@ -112,6 +130,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const quota = consumeRateQuota(`ta_post_${actor.userId}`, 30);
+    if (!quota.allowed) {
+      return NextResponse.json(
+        { error: "Too many Talent Arena updates in a short window. Please wait a moment." },
+        { status: 429 },
+      );
+    }
+
     const body: unknown = await request.json();
     const orgs = await listOrganizationsForUser(actor.userId);
     const orgIds = orgs.map((o) => o.id);
@@ -128,10 +154,10 @@ export async function POST(request: NextRequest) {
         ageZone: actor.ageZone,
         school: actor.school,
         state: actor.state,
-        headline: parsedProfile.data.headline,
+        headline: sanitizePlainText(parsedProfile.data.headline, 140),
         primaryCategory: parsedProfile.data.primaryCategory,
-        bio: parsedProfile.data.bio,
-        skills: parsedProfile.data.skills,
+        bio: sanitizePlainText(parsedProfile.data.bio, 800),
+        skills: parsedProfile.data.skills.map((s) => sanitizePlainText(s, 40)).filter(Boolean),
         portfolio: existing?.portfolio ?? [],
         updatedAt: new Date().toISOString(),
       });
@@ -141,15 +167,19 @@ export async function POST(request: NextRequest) {
     // 2. Add Portfolio Showcase Item
     const parsedPortfolio = AddPortfolioSchema.safeParse(body);
     if (parsedPortfolio.success) {
+      const urlCheck = sanitizeSafeHttpUrl(parsedPortfolio.data.mediaUrl);
+      if (!urlCheck.valid) {
+        return NextResponse.json({ error: urlCheck.error }, { status: 400 });
+      }
       const profiles = await listAllTalentProfiles();
       const existing = profiles.find((p) => p.userId === actor.userId);
       const item = {
         id: `pf_${randomUUID().slice(0, 8)}`,
-        title: parsedPortfolio.data.title,
+        title: sanitizePlainText(parsedPortfolio.data.title, 120),
         category: parsedPortfolio.data.category,
-        summary: parsedPortfolio.data.summary,
-        mediaUrl: parsedPortfolio.data.mediaUrl || undefined,
-        tags: parsedPortfolio.data.tags,
+        summary: sanitizePlainText(parsedPortfolio.data.summary, 800),
+        mediaUrl: urlCheck.value || undefined,
+        tags: parsedPortfolio.data.tags.map((t) => sanitizePlainText(t, 32)).filter(Boolean),
         moderationStatus: "APPROVED" as const,
         createdAt: new Date().toISOString(),
       };
@@ -207,22 +237,26 @@ export async function POST(request: NextRequest) {
         );
       }
 
+      const cleanSponsor = data.sponsorName ? sanitizePlainText(data.sponsorName, 120) : null;
       const competition = await createTalentCompetition({
-        title: data.title,
+        title: sanitizePlainText(data.title, 140),
         category: data.category,
         visibility: data.visibility,
         organizationId: orgId,
         organizationName: orgName,
-        sponsorName: data.visibility === "SPONSORED" ? (data.sponsorName?.trim() ?? null) : null,
+        sponsorName: data.visibility === "SPONSORED" ? cleanSponsor : null,
         sponsorshipDisclosure:
           data.visibility === "SPONSORED"
-            ? data.sponsorshipDisclosure?.trim() ||
-              `Transparent Sponsorship by ${data.sponsorName?.trim()}. Merit-based rubric judging only; zero child ad-tracking.`
+            ? sanitizePlainText(
+                data.sponsorshipDisclosure ||
+                  `Transparent Sponsorship by ${cleanSponsor}. Merit-based rubric judging only; zero child ad-tracking.`,
+                320,
+              )
             : null,
         targetZone: data.targetZone,
         status: "OPEN",
-        deadline: data.deadline,
-        recognitionAward: data.recognitionAward,
+        deadline: sanitizePlainText(data.deadline, 30),
+        recognitionAward: sanitizePlainText(data.recognitionAward, 160),
         rubric: [
           {
             id: "crit-exec",
@@ -253,6 +287,10 @@ export async function POST(request: NextRequest) {
     // 4. Submit Competition Entry (checks eligibility & rejects duplicates safely)
     const parsedEntry = SubmitEntrySchema.safeParse(body);
     if (parsedEntry.success) {
+      const artifactUrlCheck = sanitizeSafeHttpUrl(parsedEntry.data.artifactUrl);
+      if (!artifactUrlCheck.valid) {
+        return NextResponse.json({ error: artifactUrlCheck.error }, { status: 400 });
+      }
       const comps = await listTalentCompetitionsForUser(orgIds);
       const comp = comps.find((c) => c.id === parsedEntry.data.competitionId);
       if (!comp) {
@@ -271,10 +309,10 @@ export async function POST(request: NextRequest) {
         participantName: actor.displayName,
         participantZone: actor.ageZone,
         schoolName: actor.school,
-        projectTitle: parsedEntry.data.projectTitle,
+        projectTitle: sanitizePlainText(parsedEntry.data.projectTitle, 140),
         category: parsedEntry.data.category,
-        projectSummary: parsedEntry.data.projectSummary,
-        artifactUrl: parsedEntry.data.artifactUrl,
+        projectSummary: sanitizePlainText(parsedEntry.data.projectSummary, 1200),
+        artifactUrl: artifactUrlCheck.value,
       });
 
       if (result.duplicate) {
@@ -344,7 +382,7 @@ export async function POST(request: NextRequest) {
         judgeUserId: actor.userId,
         judgeName: actor.displayName,
         scoresByCriterion: sanitizedScores,
-        feedback: parsedJudge.data.feedback,
+        feedback: sanitizePlainText(parsedJudge.data.feedback, 800),
       });
 
       await logAuditEvent({

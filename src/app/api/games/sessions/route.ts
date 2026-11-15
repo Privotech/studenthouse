@@ -6,6 +6,9 @@ import { AGE_CALIBRATED_QUESTIONS, NAIJA_TRIVIA_QUESTIONS } from "@/data/mockDat
 import { calculatePlayerLevelFromXP } from "@naijaplay/game-engine";
 import { prisma } from "@/lib/prisma";
 import { getPlayerProfileFromRequest } from "@/lib/player-session";
+import { consumeRateQuota } from "@/lib/auth-security";
+import { logAuditEvent } from "@/lib/db";
+import { extractClientIp } from "@/lib/input-security";
 
 const GAME_IDS = [
   "j-math", "j-science", "j-geo", "j-vocab", "j-spatial", "j-civics",
@@ -146,6 +149,21 @@ export async function POST(request: NextRequest) {
     const player = await getPlayerProfileFromRequest(request);
     if (!player) {
       return NextResponse.json({ error: "Sign in with a persisted player account to save game results." }, { status: 401 });
+    }
+
+    const ip = extractClientIp(request.headers);
+    const quota = consumeRateQuota(`game_session_${player.user.id}`, 45);
+    if (!quota.allowed) {
+      await logAuditEvent({
+        user_id: player.user.id,
+        event_type: "RATE_LIMITED",
+        ip_address: ip,
+        details: { action: "game_session_quota" },
+      });
+      return NextResponse.json(
+        { error: "Too many game sessions in a short window. Take a brief break before starting another." },
+        { status: 429 },
+      );
     }
 
     const body: unknown = await request.json();
@@ -294,6 +312,16 @@ export async function POST(request: NextRequest) {
 
       const minRequiredSeconds = mode === "TIMED" ? Math.max(4, Math.floor(correctAnswers * 1.1)) : 3;
       if (rawDurationSeconds < minRequiredSeconds || rawDurationSeconds > 3600) {
+        await prisma.gameSession.updateMany({
+          where: { id: sessionId, status: "IN_PROGRESS" },
+          data: { status: "INVALIDATED" },
+        });
+        await logAuditEvent({
+          user_id: player.user.id,
+          event_type: "GAME_ANOMALY",
+          ip_address: ip,
+          details: { sessionId, slug, rawDurationSeconds, minRequiredSeconds, correctAnswers },
+        });
         return NextResponse.json(
           { error: "Session completion duration failed anti-cheat verification checks." },
           { status: 422 },
@@ -301,12 +329,38 @@ export async function POST(request: NextRequest) {
       }
     } else {
       // Word Challenge, Math Rush, Memory Match, Code Bug Hunter
-      if (rawDurationSeconds < 2 || rawDurationSeconds > 3600) {
-        return NextResponse.json({ error: "Session duration failed verification checks." }, { status: 422 });
+      const skillGameMaxItems: Record<string, number> = {
+        "memory-match": 8,
+        "word-challenge": 12,
+        "code-bug-hunter": 10,
+        "math-rush": 20,
+      };
+      const maxAllowed = skillGameMaxItems[slug] ?? 12;
+      if (
+        metricTotal !== undefined &&
+        metricCorrect !== undefined &&
+        metricCorrect > metricTotal
+      ) {
+        return NextResponse.json({ error: "Correct score metric cannot exceed total items." }, { status: 422 });
       }
-      totalQuestions = Math.max(1, metricTotal ?? 6);
+      totalQuestions = Math.min(maxAllowed, Math.max(1, metricTotal ?? 6));
       correctAnswers = Math.min(totalQuestions, Math.max(0, metricCorrect ?? 0));
       questionsAnswered = totalQuestions;
+
+      const minSkillSeconds = mode === "TIMED" ? Math.max(3, Math.floor(correctAnswers * 0.8)) : 3;
+      if (rawDurationSeconds < minSkillSeconds || rawDurationSeconds > 3600) {
+        await prisma.gameSession.updateMany({
+          where: { id: sessionId, status: "IN_PROGRESS" },
+          data: { status: "INVALIDATED" },
+        });
+        await logAuditEvent({
+          user_id: player.user.id,
+          event_type: "GAME_ANOMALY",
+          ip_address: ip,
+          details: { sessionId, slug, rawDurationSeconds, minSkillSeconds, correctAnswers },
+        });
+        return NextResponse.json({ error: "Session duration failed verification checks." }, { status: 422 });
+      }
     }
 
     const baseScore = correctAnswers * session.game.pointsPerCorrectAnswer;
@@ -319,12 +373,10 @@ export async function POST(request: NextRequest) {
               difficultyMultiplier,
           )
         : 0;
-    const totalXP = player.profile.totalXp + awardedXP;
-    const progression = calculatePlayerLevelFromXP(totalXP);
     const completedAt = new Date();
     const accuracyBasisPoints = Math.min(10000, Math.round(accuracyRatio * 10000));
 
-    await prisma.$transaction(async (transaction) => {
+    const updatedProgression = await prisma.$transaction(async (transaction) => {
       const claimed = await transaction.gameSession.updateMany({
         where: { id: sessionId, status: "IN_PROGRESS" },
         data: {
@@ -364,6 +416,18 @@ export async function POST(request: NextRequest) {
         });
       }
 
+      await transaction.$queryRaw`
+        SELECT id FROM "PlayerProfile"
+        WHERE id = ${player.profile.id}::uuid
+        FOR UPDATE
+      `;
+      const freshProfile = await transaction.playerProfile.findUniqueOrThrow({
+        where: { id: player.profile.id },
+        select: { totalXp: true },
+      });
+      const totalXP = freshProfile.totalXp + awardedXP;
+      const progression = calculatePlayerLevelFromXP(totalXP);
+
       await transaction.playerProfile.update({
         where: { id: player.profile.id },
         data: { totalXp: totalXP, level: progression.level },
@@ -377,7 +441,12 @@ export async function POST(request: NextRequest) {
           category: "GAME",
         },
       });
+
+      return { totalXP, level: progression.level };
     });
+
+    const totalXP = updatedProgression.totalXP;
+    const progression = { level: updatedProgression.level };
 
     return NextResponse.json(
       {

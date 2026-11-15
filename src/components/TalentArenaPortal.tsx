@@ -127,10 +127,8 @@ export const TalentArenaPortal: React.FC<TalentArenaPortalProps> = ({
   } | null>(null);
 
   const loadTalentArena = () => {
-    const token =
-      typeof window !== "undefined" ? localStorage.getItem("np_session_token") : null;
     fetch("/api/talent-arena", {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      credentials: "same-origin",
     })
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
@@ -170,13 +168,11 @@ export const TalentArenaPortal: React.FC<TalentArenaPortalProps> = ({
       onRequestAuth("signin");
       return null;
     }
-    const token =
-      typeof window !== "undefined" ? localStorage.getItem("np_session_token") : null;
     const res = await fetch("/api/talent-arena", {
       method: "POST",
+      credentials: "same-origin",
       headers: {
         "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
       body: JSON.stringify(payload),
     });

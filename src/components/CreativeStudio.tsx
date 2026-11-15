@@ -127,12 +127,11 @@ export const CreativeStudio: React.FC<CreativeStudioProps> = ({
     setPromotingId(item.id);
     setPublishError(null);
     try {
-      const token = typeof window !== "undefined" ? localStorage.getItem("np_session_token") : null;
       const res = await fetch("/api/talent-arena", {
         method: "POST",
+        credentials: "same-origin",
         headers: {
           "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({
           action: "add_portfolio_item",
@@ -310,15 +309,9 @@ export const CreativeStudio: React.FC<CreativeStudioProps> = ({
       formData.append("image", image, "composition.png");
       formData.append("title", cleanTitle);
 
-      const token = typeof window !== "undefined" ? localStorage.getItem("np_session_token") : null;
-      const headers: Record<string, string> = {};
-      if (token) {
-        headers["Authorization"] = `Bearer ${token}`;
-      }
-
       const response = await fetch("/api/media/creative", {
         method: "POST",
-        headers,
+        credentials: "same-origin",
         body: formData,
       });
       const result: unknown = await response.json();

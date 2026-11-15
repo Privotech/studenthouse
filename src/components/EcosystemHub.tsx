@@ -86,15 +86,10 @@ export const EcosystemHub: React.FC<EcosystemHubProps> = ({
 
   useEffect(() => {
     let cancelled = false;
-    const token =
-      typeof window !== "undefined" ? localStorage.getItem("np_session_token") : null;
-    const headers: Record<string, string> = token
-      ? { Authorization: `Bearer ${token}` }
-      : {};
 
     Promise.all([
-      fetch("/api/ecosystem", { headers }).then((r) => (r.ok ? r.json() : null)),
-      fetch("/api/talent-arena", { headers }).then((r) => (r.ok ? r.json() : null)),
+      fetch("/api/ecosystem", { credentials: "same-origin" }).then((r) => (r.ok ? r.json() : null)),
+      fetch("/api/talent-arena", { credentials: "same-origin" }).then((r) => (r.ok ? r.json() : null)),
     ])
       .then(([ecoData, taData]) => {
         if (cancelled) return;
@@ -125,13 +120,11 @@ export const EcosystemHub: React.FC<EcosystemHubProps> = ({
       onRequestAuth("signin");
       return null;
     }
-    const token =
-      typeof window !== "undefined" ? localStorage.getItem("np_session_token") : null;
     const res = await fetch("/api/ecosystem", {
       method: "POST",
+      credentials: "same-origin",
       headers: {
         "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
       body: JSON.stringify(payload),
     });

@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { COMMERCIAL_PLANS_CATALOG } from "@/data/ecosystemData";
+import { consumeRateQuota } from "@/lib/auth-security";
 import { logAuditEvent } from "@/lib/db";
 import { getAuthenticatedActor, getClientIp } from "@/lib/ecosystem-auth";
+import { sanitizePlainText } from "@/lib/input-security";
 import {
   createOrganizationTenant,
   getUserEntitlement,
@@ -75,15 +77,23 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const quota = consumeRateQuota(`eco_post_${actor.userId}`, 25);
+    if (!quota.allowed) {
+      return NextResponse.json(
+        { error: "Too many organization or plan updates. Please wait briefly." },
+        { status: 429 },
+      );
+    }
+
     const body: unknown = await request.json();
 
     const parsedCreateOrg = CreateOrgSchema.safeParse(body);
     if (parsedCreateOrg.success) {
       const org = await createOrganizationTenant({
         userId: actor.userId,
-        name: parsedCreateOrg.data.name,
+        name: sanitizePlainText(parsedCreateOrg.data.name, 120),
         orgType: parsedCreateOrg.data.orgType,
-        stateCode: parsedCreateOrg.data.stateCode,
+        stateCode: sanitizePlainText(parsedCreateOrg.data.stateCode, 40),
         creatorRole: parsedCreateOrg.data.creatorRole,
       });
 

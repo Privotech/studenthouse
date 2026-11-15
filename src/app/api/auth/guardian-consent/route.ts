@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { consumeRateQuota } from "@/lib/auth-security";
 import { grantGuardianConsent } from "@/lib/guardian-consent";
+import { escapeHtml, extractClientIp } from "@/lib/input-security";
 
 const securityHeaders = {
   "Content-Security-Policy": "default-src 'none'; form-action 'self'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'",
@@ -8,10 +10,13 @@ const securityHeaders = {
 };
 
 function consentPage(title: string, message: string, token?: string, status = 200) {
-  const form = token
-    ? `<form method="post"><input type="hidden" name="token" value="${token}"><button type="submit">Approve guardian consent</button></form>`
+  const safeTitle = escapeHtml(title);
+  const safeMessage = escapeHtml(message);
+  const safeToken = token && /^[a-f0-9]{64}$/.test(token) ? escapeHtml(token) : "";
+  const form = safeToken
+    ? `<form method="post"><input type="hidden" name="token" value="${safeToken}"><button type="submit">Approve guardian consent</button></form>`
     : "";
-  const html = `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${title}</title><style>body{font:16px system-ui;background:#0b111e;color:#e2e8f0;max-width:38rem;margin:10vh auto;padding:2rem}button{background:#059669;color:white;border:0;border-radius:.5rem;padding:.8rem 1rem;font-weight:700;cursor:pointer}</style><h1>${title}</h1><p>${message}</p>${form}</html>`;
+  const html = `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${safeTitle}</title><style>body{font:16px system-ui;background:#0b111e;color:#e2e8f0;max-width:38rem;margin:10vh auto;padding:2rem}button{background:#059669;color:white;border:0;border-radius:.5rem;padding:.8rem 1rem;font-weight:700;cursor:pointer}</style><h1>${safeTitle}</h1><p>${safeMessage}</p>${form}</html>`;
   return new NextResponse(html, {
     status,
     headers: { ...securityHeaders, "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" },
@@ -19,6 +24,11 @@ function consentPage(title: string, message: string, token?: string, status = 20
 }
 
 export async function GET(request: NextRequest) {
+  const ip = extractClientIp(request.headers);
+  const quota = consumeRateQuota(`consent_get_${ip}`, 30);
+  if (!quota.allowed) {
+    return consentPage("Too many requests", "Please wait before trying again.", undefined, 429);
+  }
   const token = request.nextUrl.searchParams.get("token") || "";
   if (!/^[a-f0-9]{64}$/.test(token)) {
     return consentPage("Invalid consent link", "This guardian consent link is invalid.", undefined, 400);
@@ -31,6 +41,11 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const ip = extractClientIp(request.headers);
+  const quota = consumeRateQuota(`consent_post_${ip}`, 15);
+  if (!quota.allowed) {
+    return consentPage("Too many attempts", "Please wait before submitting guardian consent again.", undefined, 429);
+  }
   try {
     const form = await request.formData();
     const token = form.get("token");
