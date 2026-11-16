@@ -196,7 +196,7 @@ export async function POST(req: NextRequest) {
       avatar_initials: avatarInitials,
       role: "STUDENT",
       level: 1,
-      xp: 100, // 100 Welcome XP
+      xp: 0,
       streak_days: 1,
       failed_attempts: 0,
       locked_until: null,

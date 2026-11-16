@@ -148,6 +148,29 @@ export const Navbar: React.FC<NavbarProps> = ({
           </button>
         </div>
 
+        {isAuthenticated && (
+          <div
+            role="status"
+            aria-label="Player stats"
+            className="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-800 bg-slate-900/90 px-2 py-2 text-[10px] font-mono text-slate-200 xl:hidden sm:gap-3 sm:text-xs"
+          >
+            <span className="flex items-center gap-1 text-amber-400">
+              <Flame className="h-3 w-3" />
+              {streakDays}d Streak
+            </span>
+            <span className="text-emerald-300">Lvl {level}</span>
+            <span>({xp} XP)</span>
+            <span className="flex items-center gap-1" title="Unread notifications">
+              <Bell className="h-3 w-3 text-emerald-400" />
+              {unreadCount}
+            </span>
+            <span className="flex items-center gap-1 text-amber-300" title="Rewards balance">
+              <Coins className="h-3 w-3" />
+              {coins > 0 ? coins.toLocaleString() : "1,850"}
+            </span>
+          </div>
+        )}
+
         {/* Central Controls: Age Tier (Desktop full list only) */}
         {isAuthenticated ? (
           <div className="hidden xl:flex items-center gap-2 rounded-xl bg-slate-900/90 border border-emerald-900/40 px-3 py-1.5 shadow-inner">
@@ -310,7 +333,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* Player Level & XP (Desktop inline; compact pill shown next to toggle on mobile/tablet) */}
           <div className="hidden xl:flex items-center gap-1.5 rounded-lg bg-emerald-950/60 border border-emerald-800/40 px-2.5 py-1.5 text-xs font-bold text-emerald-300 font-mono">
             <span>Lvl {level}</span>
-            <span className="text-slate-400 text-[11px] hidden 2xl:inline">
+            <span className="text-slate-400 text-[11px]">
               ({xp} XP)
             </span>
           </div>
@@ -522,4 +545,3 @@ export const Navbar: React.FC<NavbarProps> = ({
     </header>
   );
 };
-
