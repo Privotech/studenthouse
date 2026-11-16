@@ -21,27 +21,43 @@ export interface PasswordScore {
   feedback: string[];
 }
 
+const COMMON_WEAK_PASSWORDS = new Set([
+  "password",
+  "password1",
+  "password123",
+  "12345678",
+  "123456789",
+  "qwerty123",
+  "naijaplay123",
+  "admin1234",
+  "letmein123",
+  "welcome123",
+]);
+
 export function evaluatePasswordStrength(password: string): PasswordScore {
-  const hasMinLength = password.length >= 8;
+  const hasMinLength = password.length >= 8 && password.length <= 128;
   const hasUppercase = /[A-Z]/.test(password);
   const hasLowercase = /[a-z]/.test(password);
   const hasNumber = /[0-9]/.test(password);
   const hasSymbol = /[^A-Za-z0-9]/.test(password);
+  const isCommonPassword = COMMON_WEAK_PASSWORDS.has(password.toLowerCase());
 
   const criteria = [hasMinLength, hasUppercase, hasLowercase, hasNumber, hasSymbol];
   const passedCount = criteria.filter(Boolean).length;
 
   const feedback: string[] = [];
-  if (!hasMinLength) feedback.push("Minimum 8 characters required");
+  if (password.length < 8) feedback.push("Minimum 8 characters required");
+  if (password.length > 128) feedback.push("Maximum 128 characters allowed");
   if (!hasUppercase) feedback.push("Add at least one uppercase letter (A-Z)");
   if (!hasLowercase) feedback.push("Add at least one lowercase letter (a-z)");
   if (!hasNumber) feedback.push("Add at least one numeric digit (0-9)");
   if (!hasSymbol) feedback.push("Add at least one special character (!@#$%^&*)");
+  if (isCommonPassword) feedback.push("Avoid commonly guessed passwords");
 
   let label: PasswordScore["label"] = "Weak";
   let score = 0;
 
-  if (passedCount <= 2) {
+  if (isCommonPassword || passedCount <= 2) {
     score = 1;
     label = "Weak";
   } else if (passedCount === 3) {
@@ -66,7 +82,12 @@ export function evaluatePasswordStrength(password: string): PasswordScore {
     hasLowercase,
     hasNumber,
     hasSymbol,
-    isValid: hasMinLength && hasLowercase && (hasUppercase || hasNumber || hasSymbol),
+    isValid:
+      !isCommonPassword &&
+      hasMinLength &&
+      hasLowercase &&
+      hasUppercase &&
+      (hasNumber || hasSymbol),
     feedback,
   };
 }
@@ -87,7 +108,7 @@ export async function hashPassword(
   iterations = 100000
 ): Promise<{ hash: string; salt: string; iterations: number }> {
   const salt = saltHex || generateSalt();
-  
+
   return new Promise((resolve, reject) => {
     crypto.pbkdf2(
       password,
@@ -116,6 +137,9 @@ export async function verifyPassword(
   saltHex: string,
   iterations = 100000
 ): Promise<boolean> {
+  if (!passwordAttempt || passwordAttempt.length > 128) {
+    return false;
+  }
   return new Promise((resolve) => {
     crypto.pbkdf2(
       passwordAttempt,
@@ -153,12 +177,13 @@ export function generateSessionToken(): string {
 }
 
 /**
- * Rate Limiter and Brute-Force Shield (Sliding Window)
- * Prevents credential stuffing and automated password cracking.
+ * Bounded Sliding-Window Rate Limiter & Brute-Force Shield
+ * Prevents credential stuffing, automated password cracking, and OOM map-flooding.
  */
 interface RateLimitRecord {
   attempts: number[];
   lockedUntil: number | null;
+  lastSeen: number;
 }
 
 const rateLimitStore = new Map<string, RateLimitRecord>();
@@ -166,8 +191,29 @@ const rateLimitStore = new Map<string, RateLimitRecord>();
 const MAX_ATTEMPTS = 5;
 const WINDOW_MS = 15 * 60 * 1000; // 15 minutes
 const LOCKOUT_MS = 15 * 60 * 1000; // 15 minutes lockout
+const MAX_STORE_ENTRIES = 10_000;
 
-export function checkRateLimit(identifier: string): {
+function pruneRateLimitStore(now: number, windowMs: number) {
+  if (rateLimitStore.size < MAX_STORE_ENTRIES) return;
+  for (const [key, entry] of rateLimitStore.entries()) {
+    const expiredLock = !entry.lockedUntil || entry.lockedUntil <= now;
+    const stale = now - entry.lastSeen > windowMs;
+    if (expiredLock && stale) {
+      rateLimitStore.delete(key);
+    }
+  }
+  // Hard cap FIFO eviction if still oversized under heavy distributed flood
+  if (rateLimitStore.size >= MAX_STORE_ENTRIES) {
+    const firstKey = rateLimitStore.keys().next().value;
+    if (firstKey) rateLimitStore.delete(firstKey);
+  }
+}
+
+export function checkRateLimit(
+  identifier: string,
+  maxAttempts = MAX_ATTEMPTS,
+  windowMs = WINDOW_MS,
+): {
   allowed: boolean;
   remainingAttempts: number;
   lockoutRemainingSeconds?: number;
@@ -176,7 +222,7 @@ export function checkRateLimit(identifier: string): {
   const record = rateLimitStore.get(identifier);
 
   if (!record) {
-    return { allowed: true, remainingAttempts: MAX_ATTEMPTS };
+    return { allowed: true, remainingAttempts: maxAttempts };
   }
 
   // Check if actively locked out
@@ -190,11 +236,12 @@ export function checkRateLimit(identifier: string): {
   }
 
   // Clean old attempts outside sliding window
-  const validAttempts = record.attempts.filter((ts) => now - ts < WINDOW_MS);
+  const validAttempts = record.attempts.filter((ts) => now - ts < windowMs);
   record.attempts = validAttempts;
   record.lockedUntil = null;
+  record.lastSeen = now;
 
-  if (validAttempts.length >= MAX_ATTEMPTS) {
+  if (validAttempts.length >= maxAttempts) {
     record.lockedUntil = now + LOCKOUT_MS;
     rateLimitStore.set(identifier, record);
     return {
@@ -206,20 +253,54 @@ export function checkRateLimit(identifier: string): {
 
   return {
     allowed: true,
-    remainingAttempts: MAX_ATTEMPTS - validAttempts.length,
+    remainingAttempts: maxAttempts - validAttempts.length,
   };
 }
 
-export function recordFailedAttempt(identifier: string): void {
+export function recordFailedAttempt(
+  identifier: string,
+  maxAttempts = MAX_ATTEMPTS,
+  windowMs = WINDOW_MS,
+): void {
   const now = Date.now();
-  const record = rateLimitStore.get(identifier) || { attempts: [], lockedUntil: null };
+  pruneRateLimitStore(now, windowMs);
+  const record = rateLimitStore.get(identifier) || {
+    attempts: [],
+    lockedUntil: null,
+    lastSeen: now,
+  };
+  record.attempts = record.attempts.filter((ts) => now - ts < windowMs);
   record.attempts.push(now);
+  record.lastSeen = now;
 
-  if (record.attempts.length >= MAX_ATTEMPTS) {
+  if (record.attempts.length >= maxAttempts) {
     record.lockedUntil = now + LOCKOUT_MS;
   }
 
   rateLimitStore.set(identifier, record);
+}
+
+/**
+ * Convenience sliding-window quota helper for API endpoints (game completions, uploads, etc.).
+ */
+export function consumeRateQuota(
+  identifier: string,
+  maxRequests: number,
+  windowMs = WINDOW_MS,
+): { allowed: boolean; remaining: number; retryAfterSeconds?: number } {
+  const check = checkRateLimit(identifier, maxRequests, windowMs);
+  if (!check.allowed) {
+    return {
+      allowed: false,
+      remaining: 0,
+      retryAfterSeconds: check.lockoutRemainingSeconds,
+    };
+  }
+  recordFailedAttempt(identifier, maxRequests, windowMs);
+  return {
+    allowed: true,
+    remaining: Math.max(0, check.remainingAttempts - 1),
+  };
 }
 
 export function resetRateLimit(identifier: string): void {

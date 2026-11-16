@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import {
@@ -13,19 +14,17 @@ import {
   logAuditEvent,
 } from "@/lib/db";
 import { getCanonicalPlayerSummary } from "@/lib/player-session";
+import { extractClientIp } from "@/lib/input-security";
 import { prisma } from "@/lib/prisma";
 
 const LoginSchema = z.object({
-  identifier: z.string().min(3, "Email or username required"),
-  password: z.string().min(1, "Password required"),
+  identifier: z.string().trim().min(3, "Email or username required").max(120),
+  password: z.string().min(1, "Password required").max(128),
 });
 
 export async function POST(req: NextRequest) {
-  const ip =
-    req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-    req.headers.get("x-real-ip") ||
-    "127.0.0.1";
-  const userAgent = req.headers.get("user-agent") || "unknown";
+  const ip = extractClientIp(req.headers);
+  const userAgent = (req.headers.get("user-agent") || "unknown").slice(0, 200);
 
   // IP Rate Limit check
   const ipRateLimit = checkRateLimit(`login_ip_${ip}`);
@@ -156,7 +155,7 @@ export async function POST(req: NextRequest) {
     const nowIso = new Date().toISOString();
 
     await createSession({
-      id: `ses_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
+      id: randomUUID(),
       user_id: user.id,
       session_token: sessionToken,
       expires_at: expiresAt,
@@ -182,7 +181,6 @@ export async function POST(req: NextRequest) {
     const response = NextResponse.json({
       success: true,
       message: `Welcome back, ${user.display_name}!`,
-      sessionToken,
       user: safeUser,
     });
 

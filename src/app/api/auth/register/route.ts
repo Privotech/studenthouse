@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import {
@@ -21,23 +22,25 @@ import {
   isGuardianEmailConfigured,
   sendGuardianConsentEmail,
 } from "@/lib/guardian-consent";
+import { extractClientIp, sanitizePlainText } from "@/lib/input-security";
 
 const RegisterSchema = z.object({
-  email: z.string().email("Invalid email address").max(100),
+  email: z.string().trim().email("Invalid email address").max(100),
   username: z
     .string()
+    .trim()
     .min(3, "Username must be at least 3 characters")
     .max(25, "Username must be 25 characters or fewer")
     .regex(/^[a-zA-Z0-9_]+$/, "Username may only contain letters, numbers, and underscores"),
-  password: z.string().min(8, "Password must be at least 8 characters"),
-  displayName: z.string().min(2, "Display name must be at least 2 characters").max(50),
+  password: z.string().min(8, "Password must be at least 8 characters").max(128),
+  displayName: z.string().trim().min(2, "Display name must be at least 2 characters").max(50),
   dateOfBirth: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/, "Date of birth must be in YYYY-MM-DD format."),
-  guardianEmail: z.string().email("Enter a valid guardian email address.").optional(),
-  school: z.string().min(2, "School/Institution is required").max(100),
-  state: z.string().min(2, "State is required").max(50),
-  avatarCrest: z.string().default("Scholar"),
+  guardianEmail: z.string().trim().email("Enter a valid guardian email address.").max(100).optional(),
+  school: z.string().trim().min(2, "School/Institution is required").max(100),
+  state: z.string().trim().min(2, "State is required").max(50),
+  avatarCrest: z.enum(["Scholar", "Vanguard", "Falcon", "Apex", "Atlas", "Summit"]).default("Scholar"),
 });
 
 export async function POST(req: NextRequest) {
@@ -48,11 +51,8 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const ip =
-    req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-    req.headers.get("x-real-ip") ||
-    "127.0.0.1";
-  const userAgent = req.headers.get("user-agent") || "unknown";
+  const ip = extractClientIp(req.headers);
+  const userAgent = (req.headers.get("user-agent") || "unknown").slice(0, 200);
 
   // Rate Limiting check
   const rateLimit = checkRateLimit(`reg_${ip}`);
@@ -176,7 +176,7 @@ export async function POST(req: NextRequest) {
     // Cryptographic PBKDF2 Hashing
     const { hash, salt, iterations } = await hashPassword(password);
 
-    const userId = `usr_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+    const userId = randomUUID();
     const nowIso = new Date().toISOString();
 
     const newUser: DbUser = {
@@ -186,12 +186,12 @@ export async function POST(req: NextRequest) {
       password_hash: hash,
       salt,
       iterations,
-      display_name: displayName.trim(),
+      display_name: sanitizePlainText(displayName, 50),
       date_of_birth: dateOfBirth,
       age,
       age_zone: ageZone,
-      school: school.trim(),
-      state: state.trim(),
+      school: sanitizePlainText(school, 100),
+      state: sanitizePlainText(state, 50),
       avatar_crest: avatarCrest,
       avatar_initials: avatarInitials,
       role: "STUDENT",
@@ -243,7 +243,7 @@ export async function POST(req: NextRequest) {
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
 
     await createSession({
-      id: `ses_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
+      id: randomUUID(),
       user_id: userId,
       session_token: sessionToken,
       expires_at: expiresAt,
@@ -258,7 +258,6 @@ export async function POST(req: NextRequest) {
     const response = NextResponse.json({
       success: true,
       message: "Registration completed successfully. Welcome to NaijaPlay!",
-      sessionToken,
       user: safeUser,
     });
 

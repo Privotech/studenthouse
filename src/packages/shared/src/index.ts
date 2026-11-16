@@ -146,13 +146,20 @@ export class InvariantViolationError extends AppError {
   }
 }
 
+function nextRequestId(): string {
+  if (typeof globalThis.crypto?.randomUUID === "function") {
+    return `req_${globalThis.crypto.randomUUID().slice(0, 12)}`;
+  }
+  return `req_${Date.now().toString(36)}`;
+}
+
 export function createSuccessResponse<T>(data: T, requestId?: string): ApiResponse<T> {
   return {
     success: true,
     data,
     error: null,
     meta: {
-      requestId: requestId ?? `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`,
+      requestId: requestId ?? nextRequestId(),
       timestamp: new Date().toISOString(),
       version: "v1",
     },
@@ -164,7 +171,7 @@ export function createErrorResponse(
   requestId?: string,
 ): { status: number; body: ApiResponse<null> } {
   const meta: ApiMeta = {
-    requestId: requestId ?? `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`,
+    requestId: requestId ?? nextRequestId(),
     timestamp: new Date().toISOString(),
     version: "v1",
   };

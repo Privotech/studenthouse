@@ -5,6 +5,8 @@ import { z } from "zod";
 import { calculatePlayerLevelFromXP } from "@naijaplay/game-engine";
 import { prisma } from "@/lib/prisma";
 import { getPlayerProfileFromRequest } from "@/lib/player-session";
+import { logAuditEvent } from "@/lib/db";
+import { extractClientIp } from "@/lib/input-security";
 
 const EntrySchema = z.object({
   tournamentId: z.enum(["tourn-1", "tourn-2", "tourn-3"]),
@@ -35,9 +37,7 @@ export async function POST(request: NextRequest) {
     }
 
     const awardedXP = 50;
-    const totalXP = player.profile.totalXp + awardedXP;
-    const progression = calculatePlayerLevelFromXP(totalXP);
-    const entry = await prisma.$transaction(async (transaction) => {
+    const entryResult = await prisma.$transaction(async (transaction) => {
       const registration = await transaction.tournamentEntry.create({
         data: {
           tournamentId: tournament.id,
@@ -54,15 +54,45 @@ export async function POST(request: NextRequest) {
           ${`tournament-entry-${tournament.id}-${player.profile.id}`}, ${awardedXP}
         )
       `;
+      await transaction.$queryRaw`
+        SELECT id FROM "PlayerProfile"
+        WHERE id = ${player.profile.id}::uuid
+        FOR UPDATE
+      `;
+      const freshProfile = await transaction.playerProfile.findUniqueOrThrow({
+        where: { id: player.profile.id },
+        select: { totalXp: true },
+      });
+      const totalXP = freshProfile.totalXp + awardedXP;
+      const progression = calculatePlayerLevelFromXP(totalXP);
       await transaction.playerProfile.update({
         where: { id: player.profile.id },
         data: { totalXp: totalXP, level: progression.level },
       });
-      return registration;
+      return { registration, totalXP, level: progression.level };
+    });
+
+    await logAuditEvent({
+      user_id: player.user.id,
+      event_type: "TOURNAMENT_ENTRY",
+      ip_address: extractClientIp(request.headers),
+      details: {
+        entryId: entryResult.registration.id,
+        tournamentId,
+        tournamentTitle: tournament.title,
+        ageZone: player.profile.ageZone,
+        awardedXP,
+      },
     });
 
     return NextResponse.json(
-      { entry, tournamentId, awardedXP, totalXP, level: progression.level },
+      {
+        entry: entryResult.registration,
+        tournamentId,
+        awardedXP,
+        totalXP: entryResult.totalXP,
+        level: entryResult.level,
+      },
       { status: 201 },
     );
   } catch (error) {

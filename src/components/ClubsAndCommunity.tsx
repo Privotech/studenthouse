@@ -13,15 +13,37 @@ import {
   X,
   ArrowRight,
   BookOpen,
+  Lock,
+  Flag,
+  Send,
+  Trophy,
 } from "lucide-react";
-import { AgeZone, ClubItem } from "@/types/naijaplay";
+import { AgeZone, ClubItem, ProfileVisibility } from "@/types/naijaplay";
 import { CLUBS } from "@/data/mockData";
 import { sounds } from "@/lib/audio";
+import type { ReportTarget } from "@/components/SafetyReportModal";
 
 interface ClubsAndCommunityProps {
   ageZone: AgeZone;
   onAwardXP: (amount: number, reason: string) => void;
+  blockedUsers?: string[];
+  onReportTarget?: (target: ReportTarget) => void;
+  profileVisibility?: ProfileVisibility;
+  userDisplayName?: string;
 }
+
+const PRESET_STUDY_PROMPTS = [
+  "Looking for a study partner for timed Naija Trivia rounds.",
+  "Completed today's Math Rush drill — cheering on fellow club scholars.",
+  "Preparing for this Saturday's National STEM Olympiad qualifier.",
+  "Exploring Nigerian constitutional jurisprudence notes together.",
+] as const;
+
+const CLUB_PEER_STANDINGS = [
+  { id: "peer-1", name: "Adaeze_STEM", school: "Queen's College Lagos", weeklyPoints: 1420 },
+  { id: "peer-2", name: "Chidi_Algo", school: "King's College Lagos", weeklyPoints: 1310 },
+  { id: "peer-3", name: "Amina_Cipher", school: "Loyola Jesuit Abuja", weeklyPoints: 1185 },
+];
 
 interface ClubProblem {
   title: string;
@@ -72,10 +94,23 @@ const CATEGORY_PROBLEMS: Record<string, ClubProblem> = {
 export const ClubsAndCommunity: React.FC<ClubsAndCommunityProps> = ({
   ageZone,
   onAwardXP,
+  blockedUsers = [],
+  onReportTarget,
+  profileVisibility = "SCHOOL_AND_CLUB_ONLY",
+  userDisplayName = "Scholar",
 }) => {
   const [clubs, setClubs] = useState<ClubItem[]>(CLUBS);
   const [selectedClub, setSelectedClub] = useState<ClubItem>(CLUBS[0]!);
   const [solvedActivities, setSolvedActivities] = useState<Set<string>>(new Set(["club-1-0"]));
+  const [selectedPromptIdx, setSelectedPromptIdx] = useState(0);
+  const [postedPrompts, setPostedPrompts] = useState<Array<{ id: string; author: string; text: string; time: string }>>([
+    {
+      id: "pr-init-1",
+      author: "Adaeze_STEM",
+      text: PRESET_STUDY_PROMPTS[0],
+      time: "Today",
+    },
+  ]);
   const [activeProblem, setActiveProblem] = useState<{
     activityKey: string;
     activityTitle: string;
@@ -289,6 +324,152 @@ export const ClubsAndCommunity: React.FC<ClubsAndCommunityProps> = ({
                   </div>
                 );
               })}
+            </div>
+          </div>
+
+          {/* Friends & Club Competition Standings (Privacy Controlled) */}
+          <div className="space-y-3 pt-4 border-t border-slate-800">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Trophy className="w-4 h-4 text-amber-400" />
+                <h4 className="font-display text-sm font-bold text-white uppercase tracking-wider">
+                  Club & Friends Weekly Standings
+                </h4>
+              </div>
+              <span className="inline-flex items-center gap-1 text-[11px] font-mono text-slate-400">
+                <Lock className="w-3 h-3 text-emerald-400" />
+                Visibility: {profileVisibility.replaceAll("_", " ")}
+              </span>
+            </div>
+
+            {profileVisibility === "PRIVATE_GUARDIAN_ONLY" ? (
+              <div className="rounded-xl border border-slate-800 bg-slate-950 p-4 text-xs text-slate-300">
+                Your profile visibility is set to <strong>Private Guardian Only</strong>. You can view club challenges privately without sharing your name on peer standings.
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {CLUB_PEER_STANDINGS.filter((peer) => !blockedUsers.includes(peer.name)).map((peer, idx) => (
+                  <div
+                    key={peer.id}
+                    className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950 px-3.5 py-2.5 text-xs"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <span className="font-mono font-bold text-amber-400">#{idx + 1}</span>
+                      <div>
+                        <div className="font-semibold text-white">{peer.name}</div>
+                        <div className="text-[10px] text-slate-400 font-mono">{peer.school}</div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="font-mono font-bold text-emerald-400">
+                        {peer.weeklyPoints.toLocaleString()} pts
+                      </span>
+                      {onReportTarget && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            onReportTarget({
+                              targetType: "CLUB_MEMBER",
+                              targetId: peer.id,
+                              targetLabel: `${peer.name} (${selectedClub.name})`,
+                              authorName: peer.name,
+                            })
+                          }
+                          className="rounded-lg border border-slate-800 px-2 py-1 text-[10px] font-semibold text-slate-400 hover:border-rose-700 hover:text-rose-300"
+                        >
+                          <Flag className="w-3 h-3 inline mr-1" />
+                          Report
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Minor-Safe Structured Study Exchange (No Free-Text Unrestricted DMs) */}
+          <div className="space-y-3 pt-4 border-t border-slate-800">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <MessageSquare className="w-4 h-4 text-emerald-400" />
+                <h4 className="font-display text-sm font-bold text-white uppercase tracking-wider">
+                  Moderated Study Check-Ins
+                </h4>
+              </div>
+              <span className="text-[11px] font-mono text-emerald-400">
+                {ageZone === "JUNIOR" || ageZone === "TEEN"
+                  ? "No Unrestricted DMs · Preset Safe Prompts Only"
+                  : "Moderated Academic Board"}
+              </span>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-2">
+              <select
+                value={selectedPromptIdx}
+                onChange={(e) => setSelectedPromptIdx(Number(e.target.value))}
+                className="flex-1 rounded-xl border border-slate-800 bg-slate-950 px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
+              >
+                {PRESET_STUDY_PROMPTS.map((prompt, idx) => (
+                  <option key={idx} value={idx}>
+                    {prompt}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => {
+                  sounds.playClick();
+                  setPostedPrompts((prev) => [
+                    {
+                      id: `pr-${Date.now()}`,
+                      author: userDisplayName,
+                      text: PRESET_STUDY_PROMPTS[selectedPromptIdx]!,
+                      time: "Just now",
+                    },
+                    ...prev.slice(0, 4),
+                  ]);
+                }}
+                className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white hover:bg-emerald-500 transition-colors"
+              >
+                <Send className="w-3.5 h-3.5" />
+                <span>Share Study Note</span>
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              {postedPrompts
+                .filter((post) => !blockedUsers.includes(post.author))
+                .map((post) => (
+                  <div
+                    key={post.id}
+                    className="rounded-xl border border-slate-800 bg-slate-950 px-3.5 py-2.5 text-xs flex items-start justify-between gap-3"
+                  >
+                    <div>
+                      <div className="flex items-center gap-2 font-mono text-[11px]">
+                        <span className="font-bold text-emerald-400">{post.author}</span>
+                        <span className="text-slate-500">· {post.time}</span>
+                      </div>
+                      <p className="text-slate-200 mt-1">{post.text}</p>
+                    </div>
+                    {onReportTarget && post.author !== userDisplayName && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          onReportTarget({
+                            targetType: "CLUB_MEMBER",
+                            targetId: post.id,
+                            targetLabel: `Study Note by ${post.author}`,
+                            authorName: post.author,
+                          })
+                        }
+                        className="shrink-0 text-[10px] font-semibold text-slate-500 hover:text-rose-400"
+                      >
+                        Report
+                      </button>
+                    )}
+                  </div>
+                ))}
             </div>
           </div>
         </div>

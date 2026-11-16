@@ -15,6 +15,8 @@ import {
   getAgeZonePrivacyDefaults,
   PlatformAction,
 } from "@naijaplay/permissions";
+import { consumeRateQuota } from "@/lib/auth-security";
+import { extractClientIp } from "@/lib/input-security";
 
 const PermissionVerificationRequestSchema = z.object({
   actor: z.object({
@@ -48,6 +50,10 @@ const PermissionVerificationRequestSchema = z.object({
 
 export async function POST(req: NextRequest) {
   try {
+    const quota = consumeRateQuota(`arch_perm_${extractClientIp(req.headers)}`, 60);
+    if (!quota.allowed) {
+      return NextResponse.json({ error: "Rate limit exceeded." }, { status: 429 });
+    }
     const rawBody = await req.json();
     const validated = validateWithSchema(PermissionVerificationRequestSchema, rawBody);
 

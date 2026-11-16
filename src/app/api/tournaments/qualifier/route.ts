@@ -3,6 +3,9 @@ import { Prisma } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { calculatePlayerLevelFromXP } from "@naijaplay/game-engine";
+import { consumeRateQuota } from "@/lib/auth-security";
+import { logAuditEvent } from "@/lib/db";
+import { extractClientIp } from "@/lib/input-security";
 import { getPlayerProfileFromRequest } from "@/lib/player-session";
 import { prisma } from "@/lib/prisma";
 import {
@@ -26,6 +29,14 @@ export async function POST(request: NextRequest) {
     const player = await getPlayerProfileFromRequest(request);
     if (!player) {
       return NextResponse.json({ error: "Sign in to take a saved tournament qualifier." }, { status: 401 });
+    }
+
+    const quota = consumeRateQuota(`qualifier_${player.user.id}`, 15);
+    if (!quota.allowed) {
+      return NextResponse.json(
+        { error: "Too many qualifier requests in a short window. Please try again later." },
+        { status: 429 },
+      );
     }
 
     const body: unknown = await request.json();
@@ -236,6 +247,20 @@ export async function POST(request: NextRequest) {
         data: { totalXp: totalXP, level: progression.level },
       });
       return { totalXP, level: progression.level };
+    });
+
+    await logAuditEvent({
+      user_id: player.user.id,
+      event_type: "TOURNAMENT_QUALIFIER",
+      ip_address: extractClientIp(request.headers),
+      details: {
+        sessionId,
+        tournamentId: tournament.slug,
+        score,
+        correctAnswers,
+        awardedXP,
+        level: result.level,
+      },
     });
 
     return NextResponse.json({

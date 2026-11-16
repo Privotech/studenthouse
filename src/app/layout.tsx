@@ -8,29 +8,29 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: "NaijaPlay — African Youth Learning, Games & Competition Ecosystem",
+  title: "NaijaPlay Ecosystem — NaijaPlay, SkillQuest & Talent Arena",
   description:
-    "Activity-first African youth learning and entertainment ecosystem with Neon PostgreSQL authentication, age-calibrated learning modules, Photoshop-style creative studio, and interscholastic Olympiad competitions.",
+    "Connected 3-in-1 African youth platform uniting NaijaPlay (games & verified competitions), SkillQuest (structured learning & certificates), and Talent Arena (portfolios & judged showcases) with Neon PostgreSQL & NDPA child safeguarding.",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "NaijaPlay",
+    title: "NaijaPlay Ecosystem",
   },
   icons: {
     icon: "/icon.svg",
     apple: "/icon.svg",
   },
   openGraph: {
-    title: "NaijaPlay — African Youth Learning, Games & Competition Ecosystem",
+    title: "NaijaPlay Ecosystem — NaijaPlay, SkillQuest & Talent Arena",
     description:
-      "Activity-first African youth learning and entertainment ecosystem with Neon PostgreSQL authentication, age-calibrated learning modules, Photoshop-style creative studio, and interscholastic Olympiad competitions.",
+      "One connected platform. Three experiences. Shared progress across gaming, structured learning, and talent discovery.",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "NaijaPlay — African Youth Learning, Games & Competition Ecosystem",
+    title: "NaijaPlay Ecosystem — NaijaPlay, SkillQuest & Talent Arena",
     description:
-      "Activity-first African youth learning and entertainment ecosystem with Neon PostgreSQL authentication, age-calibrated learning modules, Photoshop-style creative studio, and interscholastic Olympiad competitions.",
+      "One connected platform. Three experiences. Shared progress across gaming, structured learning, and talent discovery.",
   },
 };
 
