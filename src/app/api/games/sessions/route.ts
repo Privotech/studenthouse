@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { GameCategory } from "@prisma/client";
+import { AgeZone, GameCategory } from "@prisma/client";
 import { AGE_CALIBRATED_QUESTIONS, NAIJA_TRIVIA_QUESTIONS } from "@/data/mockData";
 import { calculatePlayerLevelFromXP } from "@naijaplay/game-engine";
 import { prisma } from "@/lib/prisma";
@@ -9,6 +9,19 @@ import { getPlayerProfileFromRequest } from "@/lib/player-session";
 import { consumeRateQuota } from "@/lib/auth-security";
 import { logAuditEvent } from "@/lib/db";
 import { extractClientIp } from "@/lib/input-security";
+
+const ALL_AGE_ZONES = [AgeZone.JUNIOR, AgeZone.TEEN, AgeZone.YOUTH, AgeZone.SENIOR] as const;
+
+const AGE_ZONE_RANK: Record<AgeZone, number> = {
+  [AgeZone.JUNIOR]: 1,
+  [AgeZone.TEEN]: 2,
+  [AgeZone.YOUTH]: 3,
+  [AgeZone.SENIOR]: 4,
+};
+
+function resolvePlayerAgeZone(zone: unknown): AgeZone | null {
+  return ALL_AGE_ZONES.includes(zone as AgeZone) ? (zone as AgeZone) : null;
+}
 
 const GAME_IDS = [
   "j-math", "j-science", "j-geo", "j-vocab", "j-spatial", "j-civics",
@@ -39,35 +52,102 @@ const CompleteSchema = z.object({
   metricTotal: z.number().int().min(1).max(60).optional(),
 });
 
-function resolveGameMeta(gameId: string): { title: string; category: GameCategory; baseXp: number } {
+function resolveGameMeta(gameId: string): {
+  title: string;
+  category: GameCategory;
+  baseXp: number;
+  minAgeZone: AgeZone;
+  maxAgeZone: AgeZone;
+} {
   switch (gameId) {
     case "naija-trivia":
-      return { title: "Naija Trivia", category: "TRIVIA", baseXp: 70 };
+      return {
+        title: "Naija Trivia",
+        category: "TRIVIA",
+        baseXp: 70,
+        minAgeZone: AgeZone.JUNIOR,
+        maxAgeZone: AgeZone.SENIOR,
+      };
     case "brain-rush":
-      return { title: "Brain Rush", category: "LOGIC", baseXp: 65 };
+      return {
+        title: "Brain Rush",
+        category: "LOGIC",
+        baseXp: 65,
+        minAgeZone: AgeZone.JUNIOR,
+        maxAgeZone: AgeZone.SENIOR,
+      };
     case "word-challenge":
-      return { title: "Word Challenge", category: "WORD", baseXp: 60 };
+      return {
+        title: "Word Challenge",
+        category: "WORD",
+        baseXp: 60,
+        minAgeZone: AgeZone.JUNIOR,
+        maxAgeZone: AgeZone.SENIOR,
+      };
     case "math-rush":
-      return { title: "Math Rush", category: "MATH", baseXp: 60 };
+      return {
+        title: "Math Rush",
+        category: "MATH",
+        baseXp: 60,
+        minAgeZone: AgeZone.JUNIOR,
+        maxAgeZone: AgeZone.SENIOR,
+      };
     case "memory-match":
-      return { title: "Memory Match", category: "MEMORY", baseXp: 75 };
+      return {
+        title: "Memory Match",
+        category: "MEMORY",
+        baseXp: 75,
+        minAgeZone: AgeZone.JUNIOR,
+        maxAgeZone: AgeZone.SENIOR,
+      };
     case "code-bug-hunter":
-      return { title: "Bug Hunter Code Lab", category: "CODING", baseXp: 85 };
+      return {
+        title: "Bug Hunter Code Lab",
+        category: "CODING",
+        baseXp: 85,
+        minAgeZone: AgeZone.JUNIOR,
+        maxAgeZone: AgeZone.SENIOR,
+      };
     default: {
       const title = gameId
         .slice(2)
         .split("-")
         .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
         .join(" ");
+      const tierZone: AgeZone = gameId.startsWith("j-")
+        ? AgeZone.JUNIOR
+        : gameId.startsWith("t-")
+          ? AgeZone.TEEN
+          : gameId.startsWith("y-")
+            ? AgeZone.YOUTH
+            : AgeZone.SENIOR;
       const category: GameCategory =
-        gameId.includes("math") || gameId.includes("quant") || gameId.includes("algebra")
+        gameId.includes("math") ||
+        gameId.includes("quant") ||
+        gameId.includes("algebra") ||
+        gameId.includes("finance") ||
+        gameId.includes("econ") ||
+        gameId.includes("macro") ||
+        gameId.includes("trade")
           ? "MATH"
-          : gameId.includes("code") || gameId.includes("algo") || gameId.includes("system") || gameId.includes("crypto")
+          : gameId.includes("code") ||
+              gameId.includes("algo") ||
+              gameId.includes("system") ||
+              gameId.includes("crypto") ||
+              gameId.includes("ai")
             ? "CODING"
             : gameId.includes("vocab") || gameId.includes("lit")
               ? "WORD"
-              : "TRIVIA";
-      return { title: `Brain Rush · ${title}`, category, baseXp: 60 };
+              : gameId.includes("law") || gameId.includes("juris") || gameId.includes("spatial")
+                ? "LOGIC"
+                : "TRIVIA";
+      return {
+        title: `Brain Rush · ${title}`,
+        category,
+        baseXp: tierZone === AgeZone.SENIOR ? 75 : tierZone === AgeZone.YOUTH ? 70 : 60,
+        minAgeZone: tierZone,
+        maxAgeZone: tierZone,
+      };
     }
   }
 }
@@ -166,26 +246,46 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const playerZone = resolvePlayerAgeZone(player.profile.ageZone);
+    if (!playerZone) {
+      return NextResponse.json({ error: "Player age tier could not be verified." }, { status: 403 });
+    }
+
     const body: unknown = await request.json();
     const parsedStart = StartSchema.safeParse(body);
     if (parsedStart.success) {
       const { gameId } = parsedStart.data;
       const meta = resolveGameMeta(gameId);
+      if (
+        AGE_ZONE_RANK[playerZone] < AGE_ZONE_RANK[meta.minAgeZone] ||
+        AGE_ZONE_RANK[playerZone] > AGE_ZONE_RANK[meta.maxAgeZone]
+      ) {
+        return NextResponse.json(
+          { error: "This academic game module is calibrated for a different age tier." },
+          { status: 403 },
+        );
+      }
+
       const bankSize =
         gameId === "naija-trivia"
-          ? (NAIJA_TRIVIA_QUESTIONS[player.profile.ageZone]?.length ?? 6)
-          : (AGE_CALIBRATED_QUESTIONS[player.profile.ageZone]?.length ?? 8);
+          ? (NAIJA_TRIVIA_QUESTIONS[playerZone]?.length ?? 6)
+          : (AGE_CALIBRATED_QUESTIONS[playerZone]?.length ?? 8);
 
       const game = await prisma.game.upsert({
         where: { slug: gameId },
-        update: { title: meta.title, category: meta.category },
+        update: {
+          title: meta.title,
+          category: meta.category,
+          minAgeZone: meta.minAgeZone,
+          maxAgeZone: meta.maxAgeZone,
+        },
         create: {
           slug: gameId,
           title: meta.title,
           description: "Age-calibrated academic & trivia session.",
           category: meta.category,
-          minAgeZone: "JUNIOR",
-          maxAgeZone: "SENIOR",
+          minAgeZone: meta.minAgeZone,
+          maxAgeZone: meta.maxAgeZone,
           maxPossibleScore: bankSize * 150,
           pointsPerCorrectAnswer: 100,
           maxQuestionsPerSession: bankSize,
@@ -281,8 +381,8 @@ export async function POST(request: NextRequest) {
     if (isQuizEngine) {
       const bank =
         slug === "naija-trivia"
-          ? NAIJA_TRIVIA_QUESTIONS[player.profile.ageZone]
-          : AGE_CALIBRATED_QUESTIONS[player.profile.ageZone];
+          ? NAIJA_TRIVIA_QUESTIONS[playerZone]
+          : AGE_CALIBRATED_QUESTIONS[playerZone];
 
       if (!bank?.length || !answers || answers.length === 0) {
         return NextResponse.json({ error: "Missing quiz answers for session verification." }, { status: 422 });

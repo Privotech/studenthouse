@@ -1415,7 +1415,7 @@ export interface GameQuestionItem {
   explanation: string;
 }
 
-export const AGE_CALIBRATED_QUESTIONS: Record<string, GameQuestionItem[]> = {
+export const AGE_CALIBRATED_QUESTIONS: Record<AgeZone, GameQuestionItem[]> = {
   JUNIOR: [
     {
       id: "j-1",
@@ -2477,7 +2477,7 @@ export const CORE_GAME_CATALOG: GameCatalogEntry[] = [
     category: "WORD",
     arenaMode: "cipher",
     description: "Unscramble contextual scholarly vocabulary, geographic terms, and domain terminology against clues.",
-    recommendedZones: ["JUNIOR", "TEEN", "YOUTH"],
+    recommendedZones: ["JUNIOR", "TEEN", "YOUTH", "SENIOR"],
     supportsUntimed: true,
     xpRange: "+100 to +160 XP",
   },
