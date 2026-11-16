@@ -133,9 +133,11 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
 
         <div className="flex items-center gap-2 xl:hidden">
-          <div className="rounded-lg border border-emerald-800/40 bg-emerald-950/60 px-2.5 py-1.5 text-xs font-bold text-emerald-300 font-mono">
-            Lvl {level}
-          </div>
+          {isAuthenticated && (
+            <div className="rounded-lg border border-emerald-800/40 bg-emerald-950/60 px-2.5 py-1.5 text-xs font-bold text-emerald-300 font-mono">
+              Lvl {level}
+            </div>
+          )}
           <button
             type="button"
             onClick={() => setMobileMenuOpen((isOpen) => !isOpen)}
@@ -308,10 +310,12 @@ export const Navbar: React.FC<NavbarProps> = ({
           )}
 
           {/* Daily Streak */}
-          <div className="flex items-center gap-1.5 rounded-lg bg-slate-900 border border-slate-800 px-2.5 py-1.5 text-xs font-semibold text-amber-400 font-mono">
-            <Flame className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
-            <span>{streakDays}d Streak</span>
-          </div>
+          {isAuthenticated && (
+            <div className="flex items-center gap-1.5 rounded-lg bg-slate-900 border border-slate-800 px-2.5 py-1.5 text-xs font-semibold text-amber-400 font-mono">
+              <Flame className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
+              <span>{streakDays}d Streak</span>
+            </div>
+          )}
 
           {/* Active Screen-Time Usage Indicator (for Authenticated Users) */}
           {isAuthenticated && (
@@ -331,15 +335,17 @@ export const Navbar: React.FC<NavbarProps> = ({
           )}
 
           {/* Player Level & XP (Desktop inline; compact pill shown next to toggle on mobile/tablet) */}
-          <div className="hidden xl:flex items-center gap-1.5 rounded-lg bg-emerald-950/60 border border-emerald-800/40 px-2.5 py-1.5 text-xs font-bold text-emerald-300 font-mono">
-            <span>Lvl {level}</span>
-            <span className="text-slate-400 text-[11px]">
-              ({xp} XP)
-            </span>
-          </div>
+          {isAuthenticated && (
+            <div className="hidden xl:flex items-center gap-1.5 rounded-lg bg-emerald-950/60 border border-emerald-800/40 px-2.5 py-1.5 text-xs font-bold text-emerald-300 font-mono">
+              <span>Lvl {level}</span>
+              <span className="text-slate-400 text-[11px]">
+                ({xp} XP)
+              </span>
+            </div>
+          )}
 
           {/* Notifications & Announcements Bell */}
-          <div className="relative">
+          {isAuthenticated && <div className="relative">
             <button
               type="button"
               onClick={() => {
@@ -415,10 +421,10 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </div>
               </div>
             )}
-          </div>
+          </div>}
 
           {/* Pan-African Rewards & Airtime Store Button */}
-          {onOpenRewards && (
+          {isAuthenticated && onOpenRewards && (
             <button
               onClick={() => {
                 sounds.playClick();
