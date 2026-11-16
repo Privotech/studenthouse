@@ -3,6 +3,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import {
   verifyPassword,
+  verifyDummyPassword,
+  sanitizeUserForClient,
   generateSessionToken,
   checkRateLimit,
   recordFailedAttempt,
@@ -14,7 +16,7 @@ import {
   logAuditEvent,
 } from "@/lib/db";
 import { getCanonicalPlayerSummary } from "@/lib/player-session";
-import { extractClientIp } from "@/lib/input-security";
+import { extractClientIp, sanitizePlainText } from "@/lib/input-security";
 import { prisma } from "@/lib/prisma";
 
 const LoginSchema = z.object({
@@ -53,6 +55,7 @@ export async function POST(req: NextRequest) {
     const validated = LoginSchema.safeParse(body);
 
     if (!validated.success) {
+      recordFailedAttempt(`login_ip_${ip}`);
       return NextResponse.json(
         { error: "Please enter your email/username and password." },
         { status: 400 }
@@ -60,6 +63,7 @@ export async function POST(req: NextRequest) {
     }
 
     const { identifier, password } = validated.data;
+    const safeIdentifierLog = sanitizePlainText(identifier, 120);
     const accountRateKey = `login_acct_${identifier.toLowerCase().trim()}`;
 
     // Account-specific Rate Limit check
@@ -88,6 +92,7 @@ export async function POST(req: NextRequest) {
     const user = await findUserByEmailOrUsername(identifier);
 
     if (!user) {
+      await verifyDummyPassword(password);
       recordFailedAttempt(`login_ip_${ip}`);
       recordFailedAttempt(accountRateKey);
 
@@ -95,7 +100,7 @@ export async function POST(req: NextRequest) {
         user_id: null,
         event_type: "LOGIN_FAILURE",
         ip_address: ip,
-        details: { identifier, reason: "user_not_found" },
+        details: { identifier: safeIdentifierLog, reason: "user_not_found" },
       });
 
       return NextResponse.json(
@@ -120,7 +125,7 @@ export async function POST(req: NextRequest) {
         user_id: user.id,
         event_type: "LOGIN_FAILURE",
         ip_address: ip,
-        details: { identifier, reason: "incorrect_password" },
+        details: { identifier: safeIdentifierLog, reason: "incorrect_password" },
       });
 
       const updatedCheck = checkRateLimit(accountRateKey);
@@ -139,8 +144,12 @@ export async function POST(req: NextRequest) {
       select: { accountStatus: true },
     });
     if (canonicalUser && canonicalUser.accountStatus !== "ACTIVE") {
+      const statusMessage =
+        canonicalUser.accountStatus === "PENDING_GUARDIAN_CONSENT"
+          ? "This account is restricted until guardian consent is approved."
+          : "This account is currently suspended or deactivated. Contact support.";
       return NextResponse.json(
-        { error: "This account is restricted until guardian consent is approved." },
+        { error: statusMessage },
         { status: 403 },
       );
     }
@@ -171,18 +180,21 @@ export async function POST(req: NextRequest) {
       details: { username: user.username, role: user.role },
     });
 
-    // Strip secrets
-    const { password_hash, salt, ...legacySafeUser } = user;
+    // Strip secrets and internal counters
+    const legacySafeUser = sanitizeUserForClient(user as unknown as Record<string, unknown>);
     const safeUser = {
       ...legacySafeUser,
       ...(await getCanonicalPlayerSummary(user.email)),
     };
 
-    const response = NextResponse.json({
-      success: true,
-      message: `Welcome back, ${user.display_name}!`,
-      user: safeUser,
-    });
+    const response = NextResponse.json(
+      {
+        success: true,
+        message: `Welcome back, ${user.display_name}!`,
+        user: safeUser,
+      },
+      { headers: { "Cache-Control": "no-store, private" } },
+    );
 
     response.cookies.set("np_session", sessionToken, {
       httpOnly: true,

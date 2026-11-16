@@ -4,8 +4,10 @@ import { z } from "zod";
 import {
   evaluatePasswordStrength,
   hashPassword,
+  sanitizeUserForClient,
   generateSessionToken,
   checkRateLimit,
+  consumeRateQuota,
   recordFailedAttempt,
 } from "@/lib/auth-security";
 import { resolveAuthoritativeAgeZone } from "@naijaplay/validation";
@@ -73,6 +75,26 @@ export async function POST(req: NextRequest) {
         lockoutRemainingSeconds: rateLimit.lockoutRemainingSeconds,
       },
       { status: 429 }
+    );
+  }
+
+  const signupQuota = consumeRateQuota(`reg_quota_${ip}`, 10, 60 * 60 * 1000);
+  if (!signupQuota.allowed) {
+    await logAuditEvent({
+      user_id: null,
+      event_type: "RATE_LIMITED",
+      ip_address: ip,
+      details: {
+        action: "register_hourly_quota_exceeded",
+        lockoutRemainingSeconds: signupQuota.retryAfterSeconds,
+      },
+    });
+    return NextResponse.json(
+      {
+        error: "Registration hourly quota reached from this network. Please try again later.",
+        lockoutRemainingSeconds: signupQuota.retryAfterSeconds,
+      },
+      { status: 429 },
     );
   }
 
@@ -210,7 +232,7 @@ export async function POST(req: NextRequest) {
       user_id: userId,
       event_type: "REGISTER",
       ip_address: ip,
-      details: { email: newUser.email, ageZone, school, iterations },
+      details: { username: newUser.username, ageZone, school: newUser.school, state: newUser.state },
     });
 
     if (ageDetails.requiresGuardianConsent) {
@@ -253,13 +275,16 @@ export async function POST(req: NextRequest) {
     });
 
     // Strip sensitive fields
-    const { password_hash, salt: userSalt, ...safeUser } = newUser;
+    const safeUser = sanitizeUserForClient(newUser as unknown as Record<string, unknown>);
 
-    const response = NextResponse.json({
-      success: true,
-      message: "Registration completed successfully. Welcome to NaijaPlay!",
-      user: safeUser,
-    });
+    const response = NextResponse.json(
+      {
+        success: true,
+        message: "Registration completed successfully. Welcome to NaijaPlay!",
+        user: safeUser,
+      },
+      { headers: { "Cache-Control": "no-store, private" } },
+    );
 
     response.cookies.set("np_session", sessionToken, {
       httpOnly: true,

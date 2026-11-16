@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { consumeRateQuota } from "@/lib/auth-security";
 import { prisma } from "@/lib/prisma";
 import { getPlayerProfileFromRequest } from "@/lib/player-session";
 import { DEFAULT_ANNOUNCEMENTS } from "@/data/mockData";
@@ -57,6 +58,11 @@ export async function PATCH(request: NextRequest) {
     const player = await getPlayerProfileFromRequest(request);
     if (!player) {
       return NextResponse.json({ ok: true });
+    }
+
+    const quota = consumeRateQuota(`notif_patch_${player.user.id}`, 30);
+    if (!quota.allowed) {
+      return NextResponse.json({ error: "Too many notification updates. Please wait briefly." }, { status: 429 });
     }
 
     const body: unknown = await request.json();

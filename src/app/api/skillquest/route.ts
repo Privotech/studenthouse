@@ -300,14 +300,20 @@ export async function POST(request: NextRequest) {
         );
       }
 
+      const cleanClassLabel = sanitizePlainText(data.classLabel, 60);
+      const cleanCourseId = sanitizePlainText(data.courseId, 80);
+      const cleanCourseTitle = sanitizePlainText(data.courseTitle, 140);
+      const cleanDueDate = sanitizePlainText(data.dueDate, 30);
+      const cleanInstructions = sanitizePlainText(data.instructions, 600);
+
       const task = await createClassTaskAssignment({
         organizationId: membership.organizationId,
         organizationName: membership.name,
-        classLabel: data.classLabel,
-        courseId: data.courseId,
-        courseTitle: data.courseTitle,
-        dueDate: data.dueDate,
-        instructions: data.instructions,
+        classLabel: cleanClassLabel,
+        courseId: cleanCourseId,
+        courseTitle: cleanCourseTitle,
+        dueDate: cleanDueDate,
+        instructions: cleanInstructions,
         assignedBy: actor.displayName,
       });
 
@@ -318,8 +324,8 @@ export async function POST(request: NextRequest) {
         details: {
           taskId: task.id,
           organizationId: membership.organizationId,
-          classLabel: data.classLabel,
-          courseId: data.courseId,
+          classLabel: cleanClassLabel,
+          courseId: cleanCourseId,
         },
       });
 

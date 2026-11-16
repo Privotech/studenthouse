@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { AgeZone, AccountStatus, UserRole } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { hashSessionToken } from "@/lib/session-crypto";
-import { notifyAdminOfActivity } from "@/lib/admin-notifications";
+import { notifyAdminOfActivity, redactSensitiveDetails } from "@/lib/admin-notifications";
 
 /**
  * PostgreSQL database client and storage engine.
@@ -358,9 +358,11 @@ export async function deleteSession(token: string): Promise<void> {
 }
 
 export async function logAuditEvent(log: Omit<DbAuditLog, "id" | "created_at">): Promise<void> {
+  const safeDetails = redactSensitiveDetails(log.details || {});
   const item: DbAuditLog = {
     id: `log_${randomUUID()}`,
     ...log,
+    details: safeDetails,
     created_at: new Date().toISOString(),
   };
 

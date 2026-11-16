@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { deleteSession, logAuditEvent } from "@/lib/db";
+import { deleteSession, findSession, logAuditEvent } from "@/lib/db";
 import { extractClientIp } from "@/lib/input-security";
 
 export async function POST(req: NextRequest) {
@@ -15,9 +15,10 @@ export async function POST(req: NextRequest) {
     }
 
     if (token) {
+      const existingSession = await findSession(token);
       await deleteSession(token);
       await logAuditEvent({
-        user_id: null,
+        user_id: existingSession?.user_id ?? null,
         event_type: "LOGOUT",
         ip_address: extractClientIp(req.headers),
         details: { action: "user_logout" },

@@ -61,6 +61,11 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: "Sign in to manage blocked accounts." }, { status: 401 });
     }
 
+    const quota = consumeRateQuota(`block_${player.user.id}`, 30);
+    if (!quota.allowed) {
+      return NextResponse.json({ error: "Too many block actions. Please wait." }, { status: 429 });
+    }
+
     const queryTarget = request.nextUrl.searchParams.get("targetName");
     let rawBody: unknown = null;
     if (!queryTarget) {

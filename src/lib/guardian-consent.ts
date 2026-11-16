@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import { Resend } from "resend";
+import { escapeHtml } from "@/lib/input-security";
 import { prisma } from "@/lib/prisma";
 
 export function isGuardianEmailConfigured() {
@@ -62,13 +63,14 @@ export async function sendGuardianConsentEmail(guardianEmail: string, token: str
   }
 
   const consentUrl = `${appUrl}/api/auth/guardian-consent?token=${encodeURIComponent(token)}`;
+  const safeConsentUrl = escapeHtml(consentUrl);
   const resend = new Resend(apiKey);
   const { error } = await resend.emails.send({
     from,
     to: guardianEmail,
     subject: "Guardian consent requested for NaijaPlay",
     text: `A player account requested guardian consent. Review and approve it here: ${consentUrl}\n\nThis link expires in 48 hours. If you did not expect this request, you can ignore this email.`,
-    html: `<p>A player account requested guardian consent.</p><p><a href="${consentUrl}">Review and approve the request</a></p><p>This link expires in 48 hours. If you did not expect this request, you can ignore this email.</p>`,
+    html: `<p>A player account requested guardian consent.</p><p><a href="${safeConsentUrl}">Review and approve the request</a></p><p>This link expires in 48 hours. If you did not expect this request, you can ignore this email.</p>`,
   });
 
   if (error) {

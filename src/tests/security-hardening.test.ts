@@ -17,13 +17,22 @@ import {
   sanitizeSafeHttpUrl,
 } from "@/lib/input-security";
 import { validateMutationOrigin } from "@/middleware";
+import { AgeZone } from "@prisma/client";
 import {
   consumeRateQuota,
   evaluatePasswordStrength,
   hashPassword,
   resetRateLimit,
+  sanitizeUserForClient,
+  verifyDummyPassword,
   verifyPassword,
 } from "@/lib/auth-security";
+import {
+  hasUniqueQuestionIds,
+  isAgeZoneWithinRange,
+  resolveGameMeta,
+  resolvePlayerAgeZone,
+} from "@/lib/game-session-config";
 
 describe("Security Hardening: Admin Clearance & Signed HMAC Sessions", () => {
   const originalAdminSecret = process.env.ADMIN_SECRET_KEY;
@@ -244,5 +253,56 @@ describe("Security Hardening: Session Hashing, Rate Limiting & Password Guard", 
     expect(
       await verifyPassword("X".repeat(200), hashed.hash, hashed.salt, hashed.iterations),
     ).toBe(false);
+
+    // Dummy password verification completes cleanly without throwing
+    await expect(verifyDummyPassword("any-password")).resolves.toBeUndefined();
+  });
+
+  it("strips password hashes, salts, iterations, and lockout counters from serialized user objects", () => {
+    const clean = sanitizeUserForClient({
+      id: "u-1",
+      email: "scholar@example.com",
+      username: "scholar_1",
+      password_hash: "secret_hash",
+      salt: "secret_salt",
+      iterations: 100000,
+      failed_attempts: 4,
+      locked_until: "2026-12-01T00:00:00Z",
+    });
+
+    expect(clean).toEqual({
+      id: "u-1",
+      email: "scholar@example.com",
+      username: "scholar_1",
+    });
+    expect("password_hash" in clean).toBe(false);
+    expect("salt" in clean).toBe(false);
+    expect("iterations" in clean).toBe(false);
+    expect("failed_attempts" in clean).toBe(false);
+    expect("locked_until" in clean).toBe(false);
+  });
+});
+
+describe("Security Hardening: AgeZone SENIOR Support & Anti-Cheat Session Config", () => {
+  it("recognizes SENIOR as a valid AgeZone and maps core + senior-exclusive modules cleanly", () => {
+    expect(resolvePlayerAgeZone("SENIOR")).toBe(AgeZone.SENIOR);
+    expect(resolvePlayerAgeZone("INVALID_TIER")).toBeNull();
+
+    const triviaMeta = resolveGameMeta("naija-trivia");
+    expect(triviaMeta.minAgeZone).toBe(AgeZone.JUNIOR);
+    expect(triviaMeta.maxAgeZone).toBe(AgeZone.SENIOR);
+    expect(isAgeZoneWithinRange(AgeZone.SENIOR, triviaMeta.minAgeZone, triviaMeta.maxAgeZone)).toBe(true);
+
+    const seniorMeta = resolveGameMeta("s-system");
+    expect(seniorMeta.minAgeZone).toBe(AgeZone.SENIOR);
+    expect(seniorMeta.maxAgeZone).toBe(AgeZone.SENIOR);
+    expect(isAgeZoneWithinRange(AgeZone.SENIOR, seniorMeta.minAgeZone, seniorMeta.maxAgeZone)).toBe(true);
+    expect(isAgeZoneWithinRange(AgeZone.YOUTH, seniorMeta.minAgeZone, seniorMeta.maxAgeZone)).toBe(false);
+  });
+
+  it("rejects duplicate question IDs used to replay single easy answers", () => {
+    expect(hasUniqueQuestionIds(undefined)).toBe(true);
+    expect(hasUniqueQuestionIds(["q1", "q2", "q3"])).toBe(true);
+    expect(hasUniqueQuestionIds(["q1", "q2", "q1"])).toBe(false);
   });
 });

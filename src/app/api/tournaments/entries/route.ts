@@ -5,6 +5,7 @@ import { z } from "zod";
 import { calculatePlayerLevelFromXP } from "@naijaplay/game-engine";
 import { prisma } from "@/lib/prisma";
 import { getPlayerProfileFromRequest } from "@/lib/player-session";
+import { consumeRateQuota } from "@/lib/auth-security";
 import { logAuditEvent } from "@/lib/db";
 import { extractClientIp } from "@/lib/input-security";
 
@@ -17,6 +18,14 @@ export async function POST(request: NextRequest) {
     const player = await getPlayerProfileFromRequest(request);
     if (!player) {
       return NextResponse.json({ error: "Sign in with a persisted player account to register." }, { status: 401 });
+    }
+
+    const quota = consumeRateQuota(`tourn_entry_${player.user.id}`, 15);
+    if (!quota.allowed) {
+      return NextResponse.json(
+        { error: "Too many tournament registration requests. Please wait briefly." },
+        { status: 429 },
+      );
     }
 
     const parsed = EntrySchema.safeParse(await request.json());

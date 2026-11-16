@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { sanitizeUserForClient } from "@/lib/auth-security";
 import { findSession, findUserById } from "@/lib/db";
 import { getCanonicalPlayerSummary } from "@/lib/player-session";
 import { prisma } from "@/lib/prisma";
@@ -49,7 +50,7 @@ export async function GET(req: NextRequest) {
       // Standalone memory fallback mode without remote Prisma
     }
 
-    const { password_hash, salt, ...legacySafeUser } = user;
+    const legacySafeUser = sanitizeUserForClient(user as unknown as Record<string, unknown>);
     const safeUser = {
       ...legacySafeUser,
       ...(await getCanonicalPlayerSummary(user.email)),

@@ -108,12 +108,13 @@ export async function hashPassword(
   iterations = 100000
 ): Promise<{ hash: string; salt: string; iterations: number }> {
   const salt = saltHex || generateSalt();
+  const safeIterations = Math.min(500_000, Math.max(100_000, Math.floor(iterations || 100000)));
 
   return new Promise((resolve, reject) => {
     crypto.pbkdf2(
       password,
       salt,
-      iterations,
+      safeIterations,
       64,
       "sha256",
       (err, derivedKey) => {
@@ -121,7 +122,7 @@ export async function hashPassword(
         resolve({
           hash: derivedKey.toString("hex"),
           salt,
-          iterations,
+          iterations: safeIterations,
         });
       }
     );
@@ -140,11 +141,12 @@ export async function verifyPassword(
   if (!passwordAttempt || passwordAttempt.length > 128) {
     return false;
   }
+  const safeIterations = Math.min(500_000, Math.max(100_000, Math.floor(iterations || 100000)));
   return new Promise((resolve) => {
     crypto.pbkdf2(
       passwordAttempt,
       saltHex,
-      iterations,
+      safeIterations,
       64,
       "sha256",
       (err, derivedKey) => {
@@ -167,6 +169,31 @@ export async function verifyPassword(
       }
     );
   });
+}
+
+const DUMMY_HASH_HEX = "0".repeat(128);
+const DUMMY_SALT_HEX = "0".repeat(32);
+
+/**
+ * Performs equivalent PBKDF2 work when an account lookup misses, preventing timing-based account enumeration.
+ */
+export async function verifyDummyPassword(passwordAttempt: string): Promise<void> {
+  await verifyPassword(passwordAttempt || "dummy", DUMMY_HASH_HEX, DUMMY_SALT_HEX, 100000);
+}
+
+/**
+ * Strips authentication secrets and internal lockout counters from user objects before returning them to clients.
+ */
+export function sanitizeUserForClient<T extends Record<string, unknown>>(
+  user: T,
+): Omit<T, "password_hash" | "salt" | "iterations" | "failed_attempts" | "locked_until"> {
+  const sanitized = { ...user };
+  delete sanitized.password_hash;
+  delete sanitized.salt;
+  delete sanitized.iterations;
+  delete sanitized.failed_attempts;
+  delete sanitized.locked_until;
+  return sanitized;
 }
 
 /**

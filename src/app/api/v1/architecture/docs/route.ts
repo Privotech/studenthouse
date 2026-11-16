@@ -7,6 +7,8 @@ import {
   createSuccessResponse,
   ErrorCode,
 } from "@naijaplay/shared";
+import { consumeRateQuota } from "@/lib/auth-security";
+import { extractClientIp } from "@/lib/input-security";
 
 const ALLOWED_DOCUMENT_PATHS: Record<string, { title: string; relativePath: string; category: string }> = {
   "readme": {
@@ -68,6 +70,11 @@ const ALLOWED_DOCUMENT_PATHS: Record<string, { title: string; relativePath: stri
 
 export async function GET(req: NextRequest) {
   try {
+    const quota = consumeRateQuota(`arch_docs_${extractClientIp(req.headers)}`, 60);
+    if (!quota.allowed) {
+      return NextResponse.json({ error: "Rate limit exceeded." }, { status: 429 });
+    }
+
     const docKey = req.nextUrl.searchParams.get("doc") ?? "system-architecture";
     const descriptor = ALLOWED_DOCUMENT_PATHS[docKey];
 
@@ -96,10 +103,13 @@ export async function GET(req: NextRequest) {
           category: v.category,
         })),
       }),
-      { status: 200 },
+      { status: 200, headers: { "Cache-Control": "no-store, private" } },
     );
   } catch (error) {
     const { status, body } = createErrorResponse(error);
-    return NextResponse.json(body, { status });
+    return NextResponse.json(body, {
+      status,
+      headers: { "Cache-Control": "no-store, private" },
+    });
   }
 }

@@ -22,8 +22,13 @@ const getTournamentDates = (now: Date) => {
   return [firstStart, secondStart, thirdStart];
 };
 
+let lastCatalogSyncDay: string | null = null;
+
 async function ensureTournamentCatalog() {
-  const [firstStart, secondStart, thirdStart] = getTournamentDates(new Date());
+  const now = new Date();
+  const dayKey = now.toISOString().slice(0, 10);
+  if (lastCatalogSyncDay === dayKey) return;
+  const [firstStart, secondStart, thirdStart] = getTournamentDates(now);
   const definitions = [
     {
       id: "tourn-1",
@@ -88,6 +93,7 @@ async function ensureTournamentCatalog() {
       });
     }
   }
+  lastCatalogSyncDay = dayKey;
 }
 
 export async function GET(request: NextRequest) {
@@ -95,7 +101,9 @@ export async function GET(request: NextRequest) {
     const player = await getPlayerProfileFromRequest(request);
     await ensureTournamentCatalog();
 
-    const timeframe = request.nextUrl.searchParams.get("timeframe") || "weekly";
+    const rawTimeframe = request.nextUrl.searchParams.get("timeframe");
+    const timeframe: "daily" | "weekly" | "all" =
+      rawTimeframe === "daily" || rawTimeframe === "all" ? rawTimeframe : "weekly";
     const now = new Date();
     const cutoff =
       timeframe === "daily"
