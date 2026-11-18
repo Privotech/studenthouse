@@ -1,21 +1,63 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
+import dynamic from "next/dynamic";
 import { Navbar } from "@/components/Navbar";
 import { BottomNav } from "@/components/BottomNav";
 import { HomeView } from "@/components/HomeView";
-import { GameArena } from "@/components/GameArena";
-import { CompetitionArena } from "@/components/CompetitionArena";
-import { SkillQuestPortal } from "@/components/SkillQuestPortal";
-import { TalentArenaPortal } from "@/components/TalentArenaPortal";
-import { CreativeStudio } from "@/components/CreativeStudio";
-import { ClubsAndCommunity } from "@/components/ClubsAndCommunity";
-import { PlayerProfileView } from "@/components/PlayerProfileView";
-import { ParentAndSchoolPortal } from "@/components/ParentAndSchoolPortal";
-import { RoadmapModal } from "@/components/RoadmapModal";
-import { AuthModal } from "@/components/AuthModal";
-import { RewardsStoreModal } from "@/components/RewardsStoreModal";
-import { SafetyReportModal, type ReportTarget } from "@/components/SafetyReportModal";
+import type { ReportTarget } from "@/components/SafetyReportModal";
+
+const TabLoadingFallback = () => (
+  <div className="rounded-3xl border border-slate-800 bg-slate-900/60 p-8 text-center text-xs font-mono text-slate-400">
+    Loading workspace module...
+  </div>
+);
+
+const GameArena = dynamic(
+  () => import("@/components/GameArena").then((m) => m.GameArena),
+  { loading: TabLoadingFallback },
+);
+const CompetitionArena = dynamic(
+  () => import("@/components/CompetitionArena").then((m) => m.CompetitionArena),
+  { loading: TabLoadingFallback },
+);
+const SkillQuestPortal = dynamic(
+  () => import("@/components/SkillQuestPortal").then((m) => m.SkillQuestPortal),
+  { loading: TabLoadingFallback },
+);
+const TalentArenaPortal = dynamic(
+  () => import("@/components/TalentArenaPortal").then((m) => m.TalentArenaPortal),
+  { loading: TabLoadingFallback },
+);
+const CreativeStudio = dynamic(
+  () => import("@/components/CreativeStudio").then((m) => m.CreativeStudio),
+  { loading: TabLoadingFallback },
+);
+const ClubsAndCommunity = dynamic(
+  () => import("@/components/ClubsAndCommunity").then((m) => m.ClubsAndCommunity),
+  { loading: TabLoadingFallback },
+);
+const PlayerProfileView = dynamic(
+  () => import("@/components/PlayerProfileView").then((m) => m.PlayerProfileView),
+  { loading: TabLoadingFallback },
+);
+const ParentAndSchoolPortal = dynamic(
+  () => import("@/components/ParentAndSchoolPortal").then((m) => m.ParentAndSchoolPortal),
+  { loading: TabLoadingFallback },
+);
+
+const RoadmapModal = dynamic(
+  () => import("@/components/RoadmapModal").then((m) => m.RoadmapModal),
+);
+const AuthModal = dynamic(
+  () => import("@/components/AuthModal").then((m) => m.AuthModal),
+);
+const RewardsStoreModal = dynamic(
+  () => import("@/components/RewardsStoreModal").then((m) => m.RewardsStoreModal),
+);
+const SafetyReportModal = dynamic(
+  () => import("@/components/SafetyReportModal").then((m) => m.SafetyReportModal),
+);
 import {
   AgeZone,
   CreativeSubmissionItem,
@@ -738,43 +780,51 @@ export default function NaijaPlayApp() {
       <BottomNav activeTab={activeTab} onTabChange={handleTabChange} />
 
       {/* Safety Report & Block Modal */}
-      <SafetyReportModal
-        target={reportTarget}
-        isAuthenticated={isAuthenticated}
-        onClose={() => setReportTarget(null)}
-        onBlockUser={handleBlockUser}
-        onReportSubmitted={(msg) => showToast(msg)}
-        onRequestAuth={() => {
-          setAuthDefaultTab("signin");
-          setIsAuthOpen(true);
-        }}
-      />
+      {reportTarget && (
+        <SafetyReportModal
+          target={reportTarget}
+          isAuthenticated={isAuthenticated}
+          onClose={() => setReportTarget(null)}
+          onBlockUser={handleBlockUser}
+          onReportSubmitted={(msg) => showToast(msg)}
+          onRequestAuth={() => {
+            setAuthDefaultTab("signin");
+            setIsAuthOpen(true);
+          }}
+        />
+      )}
 
       {/* Product Roadmap Modal */}
-      <RoadmapModal
-        isOpen={isRoadmapOpen}
-        onClose={() => setIsRoadmapOpen(false)}
-      />
+      {isRoadmapOpen && (
+        <RoadmapModal
+          isOpen={isRoadmapOpen}
+          onClose={() => setIsRoadmapOpen(false)}
+        />
+      )}
 
       {/* Pan-African Rewards & Airtime Store Modal */}
-      <RewardsStoreModal
-        isOpen={isRewardsOpen}
-        onClose={() => setIsRewardsOpen(false)}
-        player={player}
-        onCoinsDeducted={(newCoins) => {
-          setPlayer((prev) => ({ ...prev, coins: newCoins }));
-          showToast(`Reward voucher successfully redeemed! Remaining balance: ${newCoins} coins.`);
-        }}
-        onNavigateTab={setActiveTab}
-      />
+      {isRewardsOpen && (
+        <RewardsStoreModal
+          isOpen={isRewardsOpen}
+          onClose={() => setIsRewardsOpen(false)}
+          player={player}
+          onCoinsDeducted={(newCoins) => {
+            setPlayer((prev) => ({ ...prev, coins: newCoins }));
+            showToast(`Reward voucher successfully redeemed! Remaining balance: ${newCoins} coins.`);
+          }}
+          onNavigateTab={setActiveTab}
+        />
+      )}
 
-      {/* NeonDB Authentication Modal (Sign In / Register) */}
-      <AuthModal
-        isOpen={isAuthOpen}
-        onClose={() => setIsAuthOpen(false)}
-        onAuthSuccess={handleAuthSuccess}
-        defaultTab={authDefaultTab}
-      />
+      {/* PostgreSQL Authentication Modal (Sign In / Register) */}
+      {isAuthOpen && (
+        <AuthModal
+          isOpen={isAuthOpen}
+          onClose={() => setIsAuthOpen(false)}
+          onAuthSuccess={handleAuthSuccess}
+          defaultTab={authDefaultTab}
+        />
+      )}
     </div>
   );
 }

@@ -371,7 +371,7 @@ export async function logAuditEvent(log: Omit<DbAuditLog, "id" | "created_at">):
       await initTablesIfRemote();
       await prisma.$executeRaw`
         INSERT INTO np_audit_logs (id, user_id, event_type, ip_address, details, created_at)
-        VALUES (${item.id}, ${item.user_id}, ${item.event_type}, ${item.ip_address}, ${JSON.stringify(item.details)}, NOW())
+        VALUES (${item.id}, ${item.user_id}, ${item.event_type}, ${item.ip_address}, ${JSON.stringify(item.details)}::jsonb, NOW())
       `;
     } catch (e) {
       console.warn("PostgreSQL audit log error:", e);

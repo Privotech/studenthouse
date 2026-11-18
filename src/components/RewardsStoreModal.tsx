@@ -44,7 +44,6 @@ export const RewardsStoreModal: React.FC<RewardsStoreModalProps> = ({
   const [countryFilter, setCountryFilter] = useState<"ALL" | "NG" | "GH" | "KE" | "ZA">("ALL");
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState<"store" | "vault">("store");
-  const [userCoins, setUserCoins] = useState(player.coins);
   const [myVouchers, setMyVouchers] = useState<RedeemedVoucher[]>([
     {
       id: "vouch-init-1",
@@ -98,9 +97,9 @@ export const RewardsStoreModal: React.FC<RewardsStoreModalProps> = ({
       return;
     }
 
-    if (userCoins < selectedReward.coinCost) {
+    if (player.coins < selectedReward.coinCost) {
       setErrorMessage(
-        `Insufficient coins. You have ${userCoins} coins, but this reward requires ${selectedReward.coinCost} coins. Play games to earn more!`,
+        `Insufficient coins. You have ${player.coins} coins, but this reward requires ${selectedReward.coinCost} coins. Play games to earn more!`,
       );
       return;
     }
@@ -110,8 +109,7 @@ export const RewardsStoreModal: React.FC<RewardsStoreModalProps> = ({
 
     setTimeout(() => {
       setIsProcessing(false);
-      const newCoins = userCoins - selectedReward.coinCost;
-      setUserCoins(newCoins);
+      const newCoins = Math.max(0, player.coins - selectedReward.coinCost);
       if (onCoinsDeducted) {
         onCoinsDeducted(newCoins);
       }
@@ -179,7 +177,7 @@ export const RewardsStoreModal: React.FC<RewardsStoreModalProps> = ({
               <div className="text-right">
                 <span className="text-[10px] text-slate-400 block font-mono leading-none">Your Balance</span>
                 <span className="font-mono text-sm sm:text-base font-extrabold text-amber-300">
-                  {userCoins.toLocaleString()} Coins
+                  {player.coins.toLocaleString()} Coins
                 </span>
               </div>
             </div>
@@ -325,7 +323,7 @@ export const RewardsStoreModal: React.FC<RewardsStoreModalProps> = ({
             <div>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {filteredRewards.map((item) => {
-                  const canAfford = userCoins >= item.coinCost;
+                  const canAfford = player.coins >= item.coinCost;
                   return (
                     <div
                       key={item.id}

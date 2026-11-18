@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
-import { neon } from "@neondatabase/serverless";
 import { Resend } from "resend";
 import { escapeHtml } from "@/lib/input-security";
+import { prisma } from "@/lib/prisma";
 
 export const DEFAULT_ADMIN_EMAIL = "jeonprivileged@gmail.com";
 
@@ -197,16 +197,30 @@ export function formatActivityNotification(activity: AdminActivityPayload): {
   return { subject, text, html };
 }
 
-function getNeonConnection(): string | null {
+function isRemotePostgresConfigured(): boolean {
   const url = process.env.DATABASE_URL || "";
-  if (
-    url &&
+  return (
+    Boolean(url) &&
     !url.includes("localhost") &&
     (url.startsWith("postgres://") || url.startsWith("postgresql://"))
-  ) {
-    return url;
-  }
-  return null;
+  );
+}
+
+async function ensureOutboxTable(): Promise<void> {
+  if (outboxTableReady) return;
+  await prisma.$executeRaw`
+    CREATE TABLE IF NOT EXISTS np_admin_email_notifications (
+      id TEXT PRIMARY KEY,
+      event_type TEXT NOT NULL,
+      recipient TEXT NOT NULL,
+      subject TEXT NOT NULL,
+      status TEXT NOT NULL,
+      provider_message_id TEXT,
+      error_message TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `;
+  outboxTableReady = true;
 }
 
 async function persistDeliveryRecord(record: AdminEmailDeliveryRecord): Promise<void> {
@@ -215,27 +229,11 @@ async function persistDeliveryRecord(record: AdminEmailDeliveryRecord): Promise<
     recentDeliveries.length = MAX_RECENT_DELIVERIES;
   }
 
-  const connectionString = getNeonConnection();
-  if (!connectionString || process.env.VITEST) return;
+  if (!isRemotePostgresConfigured() || process.env.VITEST) return;
 
   try {
-    const sql = neon(connectionString);
-    if (!outboxTableReady) {
-      await sql`
-        CREATE TABLE IF NOT EXISTS np_admin_email_notifications (
-          id TEXT PRIMARY KEY,
-          event_type TEXT NOT NULL,
-          recipient TEXT NOT NULL,
-          subject TEXT NOT NULL,
-          status TEXT NOT NULL,
-          provider_message_id TEXT,
-          error_message TEXT,
-          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-        );
-      `;
-      outboxTableReady = true;
-    }
-    await sql`
+    await ensureOutboxTable();
+    await prisma.$executeRaw`
       INSERT INTO np_admin_email_notifications (
         id, event_type, recipient, subject, status, provider_message_id, error_message, created_at
       ) VALUES (
@@ -249,32 +247,21 @@ async function persistDeliveryRecord(record: AdminEmailDeliveryRecord): Promise<
 }
 
 export async function getRecentAdminEmailDeliveries(): Promise<AdminEmailDeliveryRecord[]> {
-  const connectionString = getNeonConnection();
-  if (connectionString && !process.env.VITEST) {
+  if (isRemotePostgresConfigured() && !process.env.VITEST) {
     try {
-      const sql = neon(connectionString);
-      if (!outboxTableReady) {
-        await sql`
-          CREATE TABLE IF NOT EXISTS np_admin_email_notifications (
-            id TEXT PRIMARY KEY,
-            event_type TEXT NOT NULL,
-            recipient TEXT NOT NULL,
-            subject TEXT NOT NULL,
-            status TEXT NOT NULL,
-            provider_message_id TEXT,
-            error_message TEXT,
-            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-          );
-        `;
-        outboxTableReady = true;
-      }
-      const rows = (await sql`
+      await ensureOutboxTable();
+      const rows = await prisma.$queryRaw<
+        Array<Omit<AdminEmailDeliveryRecord, "created_at"> & { created_at: Date | string }>
+      >`
         SELECT id, event_type, recipient, subject, status, provider_message_id, error_message, created_at
         FROM np_admin_email_notifications
         ORDER BY created_at DESC
         LIMIT 30
-      `) as AdminEmailDeliveryRecord[];
-      return rows;
+      `;
+      return rows.map((row) => ({
+        ...row,
+        created_at: new Date(row.created_at).toISOString(),
+      }));
     } catch {
       return [...recentDeliveries].slice(0, 30);
     }

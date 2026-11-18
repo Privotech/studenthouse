@@ -168,7 +168,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             </span>
             <span className="flex items-center gap-1 text-amber-300" title="Rewards balance">
               <Coins className="h-3 w-3" />
-              {coins > 0 ? coins.toLocaleString() : "1,850"}
+              {coins.toLocaleString()}
             </span>
           </div>
         )}
@@ -435,7 +435,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               title="Pan-African Rewards Store · Redeem Airtime & Vouchers"
             >
               <Coins className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
-              <span>{coins > 0 ? coins.toLocaleString() : "1,850"}</span>
+              <span>{coins.toLocaleString()}</span>
             </button>
           )}
 

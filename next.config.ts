@@ -70,7 +70,11 @@ const nextConfig: NextConfig = {
     ],
   },
   output: 'standalone',
-  webpack: (config, {dev}) => {
+  webpack: (config, {dev, isServer}) => {
+    // Increase client chunk timeout to withstand cold dev builds over proxied connections
+    if (!isServer && config.output) {
+      config.output.chunkLoadTimeout = 300000;
+    }
     // HMR is disabled in AI Studio via DISABLE_HMR env var.
     // Do not modify—file watching is disabled to prevent flickering during agent edits.
     if (dev && process.env.DISABLE_HMR === 'true') {

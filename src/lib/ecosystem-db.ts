@@ -1,5 +1,4 @@
 import { randomBytes, randomUUID } from "node:crypto";
-import { neon } from "@neondatabase/serverless";
 import { calculatePlayerLevelFromXP } from "@naijaplay/game-engine";
 import {
   COMMERCIAL_PLANS_CATALOG,
@@ -7,7 +6,7 @@ import {
   INITIAL_TALENT_SHOWCASE_PROFILES,
   INITIAL_TALENT_SUBMISSIONS,
 } from "@/data/ecosystemData";
-import { getNeonConnectionString, isNeonConfigured } from "@/lib/db";
+import { isNeonConfigured } from "@/lib/db";
 import { prisma } from "@/lib/prisma";
 import {
   AgeZone,
@@ -64,9 +63,8 @@ const memIdempotencyKeys = new Set<string>();
 
 export async function initEcosystemTablesIfRemote(): Promise<void> {
   if (!isNeonConfigured || ecosystemTablesInitialized) return;
-  const sql = neon(getNeonConnectionString());
 
-  await sql`
+  await prisma.$executeRaw`
     CREATE TABLE IF NOT EXISTS np_organizations (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
@@ -78,7 +76,7 @@ export async function initEcosystemTablesIfRemote(): Promise<void> {
     );
   `;
 
-  await sql`
+  await prisma.$executeRaw`
     CREATE TABLE IF NOT EXISTS np_org_memberships (
       id TEXT PRIMARY KEY,
       organization_id TEXT NOT NULL REFERENCES np_organizations(id) ON DELETE CASCADE,
@@ -89,7 +87,7 @@ export async function initEcosystemTablesIfRemote(): Promise<void> {
     );
   `;
 
-  await sql`
+  await prisma.$executeRaw`
     CREATE TABLE IF NOT EXISTS np_subscriptions (
       user_id TEXT PRIMARY KEY,
       plan_code TEXT NOT NULL DEFAULT 'FREE_SCHOLAR',
@@ -98,7 +96,7 @@ export async function initEcosystemTablesIfRemote(): Promise<void> {
     );
   `;
 
-  await sql`
+  await prisma.$executeRaw`
     CREATE TABLE IF NOT EXISTS np_sq_progress (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL,
@@ -114,7 +112,7 @@ export async function initEcosystemTablesIfRemote(): Promise<void> {
     );
   `;
 
-  await sql`
+  await prisma.$executeRaw`
     CREATE TABLE IF NOT EXISTS np_sq_assignments (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL,
@@ -128,7 +126,7 @@ export async function initEcosystemTablesIfRemote(): Promise<void> {
     );
   `;
 
-  await sql`
+  await prisma.$executeRaw`
     CREATE TABLE IF NOT EXISTS np_sq_courses (
       id TEXT PRIMARY KEY,
       organization_id TEXT,
@@ -147,7 +145,7 @@ export async function initEcosystemTablesIfRemote(): Promise<void> {
     );
   `;
 
-  await sql`
+  await prisma.$executeRaw`
     CREATE TABLE IF NOT EXISTS np_sq_class_tasks (
       id TEXT PRIMARY KEY,
       organization_id TEXT NOT NULL,
@@ -162,7 +160,7 @@ export async function initEcosystemTablesIfRemote(): Promise<void> {
     );
   `;
 
-  await sql`
+  await prisma.$executeRaw`
     CREATE TABLE IF NOT EXISTS np_ta_profiles (
       user_id TEXT PRIMARY KEY,
       display_name TEXT NOT NULL,
@@ -179,7 +177,7 @@ export async function initEcosystemTablesIfRemote(): Promise<void> {
     );
   `;
 
-  await sql`
+  await prisma.$executeRaw`
     CREATE TABLE IF NOT EXISTS np_ta_competitions (
       id TEXT PRIMARY KEY,
       title TEXT NOT NULL,
@@ -200,7 +198,7 @@ export async function initEcosystemTablesIfRemote(): Promise<void> {
     );
   `;
 
-  await sql`
+  await prisma.$executeRaw`
     CREATE TABLE IF NOT EXISTS np_ta_submissions (
       id TEXT PRIMARY KEY,
       competition_id TEXT NOT NULL,
@@ -218,7 +216,7 @@ export async function initEcosystemTablesIfRemote(): Promise<void> {
     );
   `;
 
-  await sql`
+  await prisma.$executeRaw`
     CREATE TABLE IF NOT EXISTS np_ta_judge_scores (
       id TEXT PRIMARY KEY,
       competition_id TEXT NOT NULL,
@@ -243,8 +241,19 @@ export async function initEcosystemTablesIfRemote(): Promise<void> {
 export async function listOrganizationsForUser(userId: string): Promise<OrganizationTenantItem[]> {
   if (isNeonConfigured) {
     await initEcosystemTablesIfRemote();
-    const sql = neon(getNeonConnectionString());
-    const rows = (await sql`
+    const rows = await prisma.$queryRaw<
+      Array<{
+        id: string;
+        name: string;
+        org_type: OrganizationType;
+        join_code: string;
+        state_code: string;
+        plan_tier: SubscriptionPlanCode;
+        created_at: Date | string;
+        my_role: OrganizationMemberRole;
+        member_count: number;
+      }>
+    >`
       SELECT o.id, o.name, o.org_type, o.join_code, o.state_code, o.plan_tier, o.created_at,
              m.role AS my_role,
              (SELECT COUNT(*)::int FROM np_org_memberships mc WHERE mc.organization_id = o.id) AS member_count
@@ -252,17 +261,7 @@ export async function listOrganizationsForUser(userId: string): Promise<Organiza
       INNER JOIN np_org_memberships m ON m.organization_id = o.id
       WHERE m.user_id = ${userId}
       ORDER BY o.created_at DESC
-    `) as Array<{
-      id: string;
-      name: string;
-      org_type: OrganizationType;
-      join_code: string;
-      state_code: string;
-      plan_tier: SubscriptionPlanCode;
-      created_at: string;
-      my_role: OrganizationMemberRole;
-      member_count: number;
-    }>;
+    `;
 
     return rows.map((r) => ({
       id: r.id,
@@ -296,14 +295,15 @@ export async function getUserOrgMembership(
 ): Promise<{ organizationId: string; name: string; role: OrganizationMemberRole } | null> {
   if (isNeonConfigured) {
     await initEcosystemTablesIfRemote();
-    const sql = neon(getNeonConnectionString());
-    const rows = (await sql`
+    const rows = await prisma.$queryRaw<
+      Array<{ organization_id: string; name: string; role: OrganizationMemberRole }>
+    >`
       SELECT o.id AS organization_id, o.name, m.role
       FROM np_org_memberships m
       INNER JOIN np_organizations o ON o.id = m.organization_id
       WHERE m.user_id = ${userId} AND m.organization_id = ${organizationId}
       LIMIT 1
-    `) as Array<{ organization_id: string; name: string; role: OrganizationMemberRole }>;
+    `;
     if (!rows.length) return null;
     return {
       organizationId: rows[0]!.organization_id,
@@ -335,15 +335,16 @@ export async function createOrganizationTenant(params: {
 
   if (isNeonConfigured) {
     await initEcosystemTablesIfRemote();
-    const sql = neon(getNeonConnectionString());
-    await sql`
-      INSERT INTO np_organizations (id, name, org_type, join_code, state_code, plan_tier, created_at)
-      VALUES (${id}, ${params.name}, ${params.orgType}, ${joinCode}, ${params.stateCode}, ${planTier}, NOW())
-    `;
-    await sql`
-      INSERT INTO np_org_memberships (id, organization_id, user_id, role, created_at)
-      VALUES (${randomUUID()}, ${id}, ${params.userId}, ${params.creatorRole}, NOW())
-    `;
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`
+        INSERT INTO np_organizations (id, name, org_type, join_code, state_code, plan_tier, created_at)
+        VALUES (${id}, ${params.name}, ${params.orgType}, ${joinCode}, ${params.stateCode}, ${planTier}, NOW())
+      `;
+      await tx.$executeRaw`
+        INSERT INTO np_org_memberships (id, organization_id, user_id, role, created_at)
+        VALUES (${randomUUID()}, ${id}, ${params.userId}, ${params.creatorRole}, NOW())
+      `;
+    });
   } else {
     memOrganizations.set(id, {
       id,
@@ -385,24 +386,25 @@ export async function joinOrganizationByCode(params: {
 
   if (isNeonConfigured) {
     await initEcosystemTablesIfRemote();
-    const sql = neon(getNeonConnectionString());
-    const orgs = (await sql`
+    const orgs = await prisma.$queryRaw<
+      Array<{
+        id: string;
+        name: string;
+        org_type: OrganizationType;
+        join_code: string;
+        state_code: string;
+        plan_tier: SubscriptionPlanCode;
+        created_at: Date | string;
+      }>
+    >`
       SELECT id, name, org_type, join_code, state_code, plan_tier, created_at
       FROM np_organizations
       WHERE UPPER(join_code) = ${cleanCode}
       LIMIT 1
-    `) as Array<{
-      id: string;
-      name: string;
-      org_type: OrganizationType;
-      join_code: string;
-      state_code: string;
-      plan_tier: SubscriptionPlanCode;
-      created_at: string;
-    }>;
+    `;
     if (!orgs.length) return null;
     const org = orgs[0]!;
-    await sql`
+    await prisma.$executeRaw`
       INSERT INTO np_org_memberships (id, organization_id, user_id, role, created_at)
       VALUES (${randomUUID()}, ${org.id}, ${params.userId}, ${role}, NOW())
       ON CONFLICT (organization_id, user_id) DO NOTHING
@@ -437,10 +439,11 @@ export async function joinOrganizationByCode(params: {
 export async function getUserEntitlement(userId: string): Promise<ProductEntitlementState> {
   if (isNeonConfigured) {
     await initEcosystemTablesIfRemote();
-    const sql = neon(getNeonConnectionString());
-    const rows = (await sql`
+    const rows = await prisma.$queryRaw<
+      Array<{ plan_code: SubscriptionPlanCode; updated_at: Date | string }>
+    >`
       SELECT plan_code, updated_at FROM np_subscriptions WHERE user_id = ${userId} LIMIT 1
-    `) as Array<{ plan_code: SubscriptionPlanCode; updated_at: string }>;
+    `;
     if (rows.length) {
       const code = rows[0]!.plan_code;
       const spec = COMMERCIAL_PLANS_CATALOG[code] ?? COMMERCIAL_PLANS_CATALOG.FREE_SCHOLAR;
@@ -478,13 +481,14 @@ export async function setUserEntitlement(params: {
 
   if (isNeonConfigured) {
     await initEcosystemTablesIfRemote();
-    const sql = neon(getNeonConnectionString());
     if (key) {
-      const prev = (await sql`
+      const prev = await prisma.$queryRaw<
+        Array<{ plan_code: SubscriptionPlanCode; updated_at: Date | string }>
+      >`
         SELECT plan_code, updated_at FROM np_subscriptions
         WHERE user_id = ${params.userId} AND idempotency_key = ${key}
         LIMIT 1
-      `) as Array<{ plan_code: SubscriptionPlanCode; updated_at: string }>;
+      `;
       if (prev.length) {
         return {
           entitlement: {
@@ -495,7 +499,7 @@ export async function setUserEntitlement(params: {
         };
       }
     }
-    await sql`
+    await prisma.$executeRaw`
       INSERT INTO np_subscriptions (user_id, plan_code, idempotency_key, updated_at)
       VALUES (${params.userId}, ${params.planCode}, ${key ?? null}, NOW())
       ON CONFLICT (user_id) DO UPDATE SET
@@ -518,23 +522,24 @@ export async function setUserEntitlement(params: {
 export async function getSkillQuestProgress(userId: string): Promise<SkillQuestProgressRecord[]> {
   if (isNeonConfigured) {
     await initEcosystemTablesIfRemote();
-    const sql = neon(getNeonConnectionString());
-    const rows = (await sql`
+    const rows = await prisma.$queryRaw<
+      Array<{
+        id: string;
+        course_id: string;
+        course_title: string;
+        score_percent: number;
+        grade: "Distinction" | "Merit" | "Pass";
+        certificate_id: string;
+        xp_awarded: number;
+        criteria_met: string[];
+        completed_at: Date | string;
+      }>
+    >`
       SELECT id, course_id, course_title, score_percent, grade, certificate_id, xp_awarded, criteria_met, completed_at
       FROM np_sq_progress
       WHERE user_id = ${userId}
       ORDER BY completed_at DESC
-    `) as Array<{
-      id: string;
-      course_id: string;
-      course_title: string;
-      score_percent: number;
-      grade: "Distinction" | "Merit" | "Pass";
-      certificate_id: string;
-      xp_awarded: number;
-      criteria_met: string[];
-      completed_at: string;
-    }>;
+    `;
 
     return rows.map((r) => ({
       id: r.id,
@@ -592,15 +597,14 @@ export async function recordSkillQuestExamResult(params: {
 
   if (isNeonConfigured) {
     await initEcosystemTablesIfRemote();
-    const sql = neon(getNeonConnectionString());
 
-    await sql`
+    await prisma.$executeRaw`
       INSERT INTO np_sq_progress (
         id, user_id, course_id, course_title, score_percent, grade, certificate_id, xp_awarded, criteria_met, completed_at
       ) VALUES (
         ${record.id}, ${params.userId}, ${params.courseId}, ${params.courseTitle},
         ${record.scorePercent}, ${record.grade}, ${record.certificateId}, ${record.xpAwarded},
-        ${JSON.stringify(record.criteriaMet)}, NOW()
+        ${JSON.stringify(record.criteriaMet)}::jsonb, NOW()
       )
       ON CONFLICT (user_id, course_id) DO UPDATE SET
         score_percent = GREATEST(np_sq_progress.score_percent, EXCLUDED.score_percent),
@@ -658,22 +662,23 @@ export async function recordSkillQuestExamResult(params: {
 export async function getSkillQuestAssignments(userId: string): Promise<SkillAssignmentSubmission[]> {
   if (isNeonConfigured) {
     await initEcosystemTablesIfRemote();
-    const sql = neon(getNeonConnectionString());
-    const rows = (await sql`
+    const rows = await prisma.$queryRaw<
+      Array<{
+        id: string;
+        course_id: string;
+        project_title: string;
+        artifact_url: string;
+        summary_notes: string;
+        status: "SUBMITTED" | "REVIEWED";
+        instructor_feedback: string | null;
+        submitted_at: Date | string;
+      }>
+    >`
       SELECT id, course_id, project_title, artifact_url, summary_notes, status, instructor_feedback, submitted_at
       FROM np_sq_assignments
       WHERE user_id = ${userId}
       ORDER BY submitted_at DESC
-    `) as Array<{
-      id: string;
-      course_id: string;
-      project_title: string;
-      artifact_url: string;
-      summary_notes: string;
-      status: "SUBMITTED" | "REVIEWED";
-      instructor_feedback: string | null;
-      submitted_at: string;
-    }>;
+    `;
 
     return rows.map((r) => ({
       id: r.id,
@@ -709,8 +714,7 @@ export async function createSkillQuestAssignment(params: {
 
   if (isNeonConfigured) {
     await initEcosystemTablesIfRemote();
-    const sql = neon(getNeonConnectionString());
-    await sql`
+    await prisma.$executeRaw`
       INSERT INTO np_sq_assignments (
         id, user_id, course_id, project_title, artifact_url, summary_notes, status, submitted_at
       ) VALUES (
@@ -728,27 +732,28 @@ export async function createSkillQuestAssignment(params: {
 export async function listCustomCoursesForUser(userOrgIds: string[]): Promise<CustomInstructorCourse[]> {
   if (isNeonConfigured) {
     await initEcosystemTablesIfRemote();
-    const sql = neon(getNeonConnectionString());
-    const rows = (await sql`
+    const rows = await prisma.$queryRaw<
+      Array<{
+        id: string;
+        organization_id: string | null;
+        author_name: string;
+        title: string;
+        category: CustomInstructorCourse["category"];
+        level: CustomInstructorCourse["level"];
+        target_zone: AgeZone;
+        overview: string;
+        practical_prompt: string;
+        xp_reward: number;
+        sections: Array<{ title: string; body: string }>;
+        quiz: CustomInstructorCourse["quiz"];
+        created_at: Date | string;
+      }>
+    >`
       SELECT id, organization_id, author_name, title, category, level, target_zone, overview, practical_prompt, xp_reward, sections, quiz, created_at
       FROM np_sq_courses
       ORDER BY created_at DESC
       LIMIT 40
-    `) as Array<{
-      id: string;
-      organization_id: string | null;
-      author_name: string;
-      title: string;
-      category: CustomInstructorCourse["category"];
-      level: CustomInstructorCourse["level"];
-      target_zone: AgeZone;
-      overview: string;
-      practical_prompt: string;
-      xp_reward: number;
-      sections: Array<{ title: string; body: string }>;
-      quiz: CustomInstructorCourse["quiz"];
-      created_at: string;
-    }>;
+    `;
 
     return rows
       .filter((r) => !r.organization_id || userOrgIds.includes(r.organization_id))
@@ -795,8 +800,7 @@ export async function createCustomInstructorCourse(
 
   if (isNeonConfigured) {
     await initEcosystemTablesIfRemote();
-    const sql = neon(getNeonConnectionString());
-    await sql`
+    await prisma.$executeRaw`
       INSERT INTO np_sq_courses (
         id, organization_id, author_user_id, author_name, title, category, level, target_zone,
         overview, practical_prompt, xp_reward, sections, quiz, created_at
@@ -804,7 +808,7 @@ export async function createCustomInstructorCourse(
         ${course.id}, ${course.organizationId}, ${input.authorUserId}, ${course.authorName},
         ${course.title}, ${course.category}, ${course.level}, ${course.targetZone},
         ${course.overview}, ${course.practicalPrompt}, ${course.xpReward},
-        ${JSON.stringify(course.sections)}, ${JSON.stringify(course.quiz)}, NOW()
+        ${JSON.stringify(course.sections)}::jsonb, ${JSON.stringify(course.quiz)}::jsonb, NOW()
       )
     `;
   } else {
@@ -817,24 +821,25 @@ export async function listClassTasksForOrgs(userOrgIds: string[]): Promise<Class
   if (userOrgIds.length === 0) return [];
   if (isNeonConfigured) {
     await initEcosystemTablesIfRemote();
-    const sql = neon(getNeonConnectionString());
-    const rows = (await sql`
+    const rows = await prisma.$queryRaw<
+      Array<{
+        id: string;
+        organization_id: string;
+        organization_name: string;
+        class_label: string;
+        course_id: string;
+        course_title: string;
+        due_date: string;
+        instructions: string;
+        assigned_by: string;
+        created_at: Date | string;
+      }>
+    >`
       SELECT id, organization_id, organization_name, class_label, course_id, course_title, due_date, instructions, assigned_by, created_at
       FROM np_sq_class_tasks
       ORDER BY created_at DESC
       LIMIT 60
-    `) as Array<{
-      id: string;
-      organization_id: string;
-      organization_name: string;
-      class_label: string;
-      course_id: string;
-      course_title: string;
-      due_date: string;
-      instructions: string;
-      assigned_by: string;
-      created_at: string;
-    }>;
+    `;
 
     return rows
       .filter((r) => userOrgIds.includes(r.organization_id))
@@ -866,8 +871,7 @@ export async function createClassTaskAssignment(
 
   if (isNeonConfigured) {
     await initEcosystemTablesIfRemote();
-    const sql = neon(getNeonConnectionString());
-    await sql`
+    await prisma.$executeRaw`
       INSERT INTO np_sq_class_tasks (
         id, organization_id, organization_name, class_label, course_id, course_title, due_date, instructions, assigned_by, created_at
       ) VALUES (
@@ -888,26 +892,27 @@ export async function createClassTaskAssignment(
 export async function listAllTalentProfiles(): Promise<TalentProfileData[]> {
   if (isNeonConfigured) {
     await initEcosystemTablesIfRemote();
-    const sql = neon(getNeonConnectionString());
-    const rows = (await sql`
+    const rows = await prisma.$queryRaw<
+      Array<{
+        user_id: string;
+        display_name: string;
+        username: string;
+        age_zone: AgeZone;
+        school: string;
+        state: string;
+        headline: string;
+        primary_category: TalentProfileData["primaryCategory"];
+        bio: string;
+        skills: string[];
+        portfolio: PortfolioProjectItem[];
+        updated_at: Date | string;
+      }>
+    >`
       SELECT user_id, display_name, username, age_zone, school, state, headline, primary_category, bio, skills, portfolio, updated_at
       FROM np_ta_profiles
       ORDER BY updated_at DESC
       LIMIT 30
-    `) as Array<{
-      user_id: string;
-      display_name: string;
-      username: string;
-      age_zone: AgeZone;
-      school: string;
-      state: string;
-      headline: string;
-      primary_category: TalentProfileData["primaryCategory"];
-      bio: string;
-      skills: string[];
-      portfolio: PortfolioProjectItem[];
-      updated_at: string;
-    }>;
+    `;
 
     const remoteProfiles: TalentProfileData[] = rows.map((r) => ({
       userId: r.user_id,
@@ -942,14 +947,13 @@ export async function upsertTalentProfile(profile: TalentProfileData): Promise<T
 
   if (isNeonConfigured) {
     await initEcosystemTablesIfRemote();
-    const sql = neon(getNeonConnectionString());
-    await sql`
+    await prisma.$executeRaw`
       INSERT INTO np_ta_profiles (
         user_id, display_name, username, age_zone, school, state, headline, primary_category, bio, skills, portfolio, updated_at
       ) VALUES (
         ${clean.userId}, ${clean.displayName}, ${clean.username}, ${clean.ageZone},
         ${clean.school}, ${clean.state}, ${clean.headline}, ${clean.primaryCategory},
-        ${clean.bio}, ${JSON.stringify(clean.skills)}, ${JSON.stringify(clean.portfolio)}, NOW()
+        ${clean.bio}, ${JSON.stringify(clean.skills)}::jsonb, ${JSON.stringify(clean.portfolio)}::jsonb, NOW()
       )
       ON CONFLICT (user_id) DO UPDATE SET
         display_name = EXCLUDED.display_name,
@@ -972,31 +976,32 @@ export async function listTalentCompetitionsForUser(
   let remoteComps: TalentCompetitionItem[] = [];
   if (isNeonConfigured) {
     await initEcosystemTablesIfRemote();
-    const sql = neon(getNeonConnectionString());
-    const rows = (await sql`
+    const rows = await prisma.$queryRaw<
+      Array<{
+        id: string;
+        title: string;
+        category: TalentCompetitionItem["category"];
+        visibility: TalentCompetitionItem["visibility"];
+        organization_id: string | null;
+        organization_name: string | null;
+        sponsor_name: string | null;
+        sponsorship_disclosure: string | null;
+        target_zone: TalentCompetitionItem["targetZone"];
+        status: TalentCompetitionItem["status"];
+        deadline: string;
+        recognition_award: string;
+        rubric: TalentCompetitionItem["rubric"];
+        created_by_user_id: string;
+        organizer_name: string;
+        submissions_count: number;
+        created_at: Date | string;
+      }>
+    >`
       SELECT c.*,
              (SELECT COUNT(*)::int FROM np_ta_submissions s WHERE s.competition_id = c.id) AS submissions_count
       FROM np_ta_competitions c
       ORDER BY c.created_at DESC
-    `) as Array<{
-      id: string;
-      title: string;
-      category: TalentCompetitionItem["category"];
-      visibility: TalentCompetitionItem["visibility"];
-      organization_id: string | null;
-      organization_name: string | null;
-      sponsor_name: string | null;
-      sponsorship_disclosure: string | null;
-      target_zone: TalentCompetitionItem["targetZone"];
-      status: TalentCompetitionItem["status"];
-      deadline: string;
-      recognition_award: string;
-      rubric: TalentCompetitionItem["rubric"];
-      created_by_user_id: string;
-      organizer_name: string;
-      submissions_count: number;
-      created_at: string;
-    }>;
+    `;
 
     remoteComps = rows.map((r) => ({
       id: r.id,
@@ -1045,8 +1050,7 @@ export async function createTalentCompetition(
 
   if (isNeonConfigured) {
     await initEcosystemTablesIfRemote();
-    const sql = neon(getNeonConnectionString());
-    await sql`
+    await prisma.$executeRaw`
       INSERT INTO np_ta_competitions (
         id, title, category, visibility, organization_id, organization_name,
         sponsor_name, sponsorship_disclosure, target_zone, status, deadline,
@@ -1055,7 +1059,7 @@ export async function createTalentCompetition(
         ${item.id}, ${item.title}, ${item.category}, ${item.visibility}, ${item.organizationId},
         ${item.organizationName}, ${item.sponsorName}, ${item.sponsorshipDisclosure},
         ${item.targetZone}, ${item.status}, ${item.deadline}, ${item.recognitionAward},
-        ${JSON.stringify(item.rubric)}, ${item.createdByUserId}, ${item.organizerName}, NOW()
+        ${JSON.stringify(item.rubric)}::jsonb, ${item.createdByUserId}, ${item.organizerName}, NOW()
       )
     `;
   } else {
@@ -1069,36 +1073,37 @@ export async function listTalentSubmissions(
 ): Promise<TalentCompetitionSubmission[]> {
   if (isNeonConfigured) {
     await initEcosystemTablesIfRemote();
-    const sql = neon(getNeonConnectionString());
-    const [rawSubRows, rawScoreRows] = await Promise.all([
-      sql`SELECT * FROM np_ta_submissions ORDER BY submitted_at DESC`,
-      sql`SELECT * FROM np_ta_judge_scores ORDER BY updated_at DESC`,
+    const [subRows, scoreRows] = await Promise.all([
+      prisma.$queryRaw<
+        Array<{
+          id: string;
+          competition_id: string;
+          user_id: string;
+          participant_name: string;
+          participant_zone: AgeZone;
+          school_name: string;
+          project_title: string;
+          category: TalentCompetitionSubmission["category"];
+          project_summary: string;
+          artifact_url: string;
+          moderation_status: "APPROVED" | "PENDING_REVIEW";
+          submitted_at: Date | string;
+        }>
+      >`SELECT * FROM np_ta_submissions ORDER BY submitted_at DESC`,
+      prisma.$queryRaw<
+        Array<{
+          id: string;
+          competition_id: string;
+          submission_id: string;
+          judge_user_id: string;
+          judge_name: string;
+          scores_by_criterion: Record<string, number>;
+          total_score: number;
+          feedback: string;
+          updated_at: Date | string;
+        }>
+      >`SELECT * FROM np_ta_judge_scores ORDER BY updated_at DESC`,
     ]);
-    const subRows = rawSubRows as Array<{
-      id: string;
-      competition_id: string;
-      user_id: string;
-      participant_name: string;
-      participant_zone: AgeZone;
-      school_name: string;
-      project_title: string;
-      category: TalentCompetitionSubmission["category"];
-      project_summary: string;
-      artifact_url: string;
-      moderation_status: "APPROVED" | "PENDING_REVIEW";
-      submitted_at: string;
-    }>;
-    const scoreRows = rawScoreRows as Array<{
-      id: string;
-      competition_id: string;
-      submission_id: string;
-      judge_user_id: string;
-      judge_name: string;
-      scores_by_criterion: Record<string, number>;
-      total_score: number;
-      feedback: string;
-      updated_at: string;
-    }>;
 
     const scoresBySubmission = new Map<string, JudgeScorecardItem[]>();
     for (const s of scoreRows) {
@@ -1194,9 +1199,8 @@ export async function createTalentSubmission(
 
   if (isNeonConfigured) {
     await initEcosystemTablesIfRemote();
-    const sql = neon(getNeonConnectionString());
     try {
-      await sql`
+      await prisma.$executeRaw`
         INSERT INTO np_ta_submissions (
           id, competition_id, user_id, participant_name, participant_zone, school_name,
           project_title, category, project_summary, artifact_url, moderation_status, submitted_at
@@ -1242,13 +1246,12 @@ export async function upsertJudgeScorecard(params: {
 
   if (isNeonConfigured) {
     await initEcosystemTablesIfRemote();
-    const sql = neon(getNeonConnectionString());
-    await sql`
+    await prisma.$executeRaw`
       INSERT INTO np_ta_judge_scores (
         id, competition_id, submission_id, judge_user_id, judge_name, scores_by_criterion, total_score, feedback, updated_at
       ) VALUES (
         ${scorecard.id}, ${scorecard.competitionId}, ${scorecard.submissionId}, ${scorecard.judgeUserId},
-        ${scorecard.judgeName}, ${JSON.stringify(scorecard.scoresByCriterion)}, ${scorecard.totalScore},
+        ${scorecard.judgeName}, ${JSON.stringify(scorecard.scoresByCriterion)}::jsonb, ${scorecard.totalScore},
         ${scorecard.feedback}, NOW()
       )
       ON CONFLICT (competition_id, submission_id, judge_user_id) DO UPDATE SET
@@ -1320,16 +1323,15 @@ export async function getEcosystemAdminSnapshot() {
   }
 
   await initEcosystemTablesIfRemote();
-  const sql = neon(getNeonConnectionString());
 
   const [
     rawCounts,
-    rawOrgs,
-    rawCourses,
-    rawComps,
-    rawSubs,
+    orgRows,
+    courseRows,
+    compRows,
+    subRows,
   ] = await Promise.all([
-    sql`
+    prisma.$queryRaw<Array<Record<string, number>>>`
       SELECT
         (SELECT COUNT(*)::int FROM np_organizations) AS org_count,
         (SELECT COUNT(*)::int FROM np_subscriptions) AS sub_count,
@@ -1342,22 +1344,62 @@ export async function getEcosystemAdminSnapshot() {
         (SELECT COUNT(*)::int FROM np_ta_submissions) AS ta_sub_count,
         (SELECT COUNT(*)::int FROM np_ta_judge_scores) AS ta_judge_count
     `,
-    sql`SELECT id, name, org_type, join_code, state_code, plan_tier, created_at FROM np_organizations ORDER BY created_at DESC LIMIT 12`,
-    sql`
+    prisma.$queryRaw<
+      Array<{
+        id: string;
+        name: string;
+        org_type: string;
+        join_code: string;
+        state_code: string;
+        plan_tier: string;
+        created_at: Date | string;
+      }>
+    >`SELECT id, name, org_type, join_code, state_code, plan_tier, created_at FROM np_organizations ORDER BY created_at DESC LIMIT 12`,
+    prisma.$queryRaw<
+      Array<{
+        id: string;
+        title: string;
+        category: string;
+        author_name: string;
+        organization_name: string | null;
+        created_at: Date | string;
+      }>
+    >`
       SELECT c.id, c.title, c.category, c.author_name, o.name AS organization_name, c.created_at
       FROM np_sq_courses c
       LEFT JOIN np_organizations o ON o.id = c.organization_id
       ORDER BY c.created_at DESC
       LIMIT 12
     `,
-    sql`
+    prisma.$queryRaw<
+      Array<{
+        id: string;
+        title: string;
+        category: string;
+        visibility: string;
+        status: string;
+        organizer_name: string;
+        submissions_count: number;
+      }>
+    >`
       SELECT c.id, c.title, c.category, c.visibility, c.status, c.organizer_name,
              (SELECT COUNT(*)::int FROM np_ta_submissions s WHERE s.competition_id = c.id) AS submissions_count
       FROM np_ta_competitions c
       ORDER BY c.created_at DESC
       LIMIT 12
     `,
-    sql`
+    prisma.$queryRaw<
+      Array<{
+        id: string;
+        project_title: string;
+        participant_name: string;
+        category: string;
+        moderation_status: string;
+        submitted_at: Date | string;
+        judges_count: number;
+        average_score: number;
+      }>
+    >`
       SELECT s.id, s.project_title, s.participant_name, s.category, s.moderation_status, s.submitted_at,
              (SELECT COUNT(*)::int FROM np_ta_judge_scores j WHERE j.submission_id = s.id) AS judges_count,
              COALESCE((SELECT ROUND(AVG(j.total_score))::int FROM np_ta_judge_scores j WHERE j.submission_id = s.id), 0) AS average_score
@@ -1367,43 +1409,7 @@ export async function getEcosystemAdminSnapshot() {
     `,
   ]);
 
-  const cRow = (rawCounts as Array<Record<string, number>>)[0] ?? {};
-  const orgRows = rawOrgs as Array<{
-    id: string;
-    name: string;
-    org_type: string;
-    join_code: string;
-    state_code: string;
-    plan_tier: string;
-    created_at: string;
-  }>;
-  const courseRows = rawCourses as Array<{
-    id: string;
-    title: string;
-    category: string;
-    author_name: string;
-    organization_name: string | null;
-    created_at: string;
-  }>;
-  const compRows = rawComps as Array<{
-    id: string;
-    title: string;
-    category: string;
-    visibility: string;
-    status: string;
-    organizer_name: string;
-    submissions_count: number;
-  }>;
-  const subRows = rawSubs as Array<{
-    id: string;
-    project_title: string;
-    participant_name: string;
-    category: string;
-    moderation_status: string;
-    submitted_at: string;
-    judges_count: number;
-    average_score: number;
-  }>;
+  const cRow = rawCounts[0] ?? {};
 
   const missingSeedComps = INITIAL_TALENT_COMPETITIONS.filter(
     (seed) => !compRows.some((r) => r.id === seed.id),

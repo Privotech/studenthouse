@@ -158,7 +158,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                 <span>Rewards</span>
               </span>
               <span className="font-display text-lg sm:text-xl font-extrabold text-amber-300 font-mono mt-0.5 block">
-                {player.coins > 0 ? player.coins.toLocaleString() : "1,850"}
+                {player.coins.toLocaleString()}
               </span>
             </button>
           </div>

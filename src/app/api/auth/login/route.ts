@@ -74,7 +74,7 @@ export async function POST(req: NextRequest) {
         event_type: "RATE_LIMITED",
         ip_address: ip,
         details: {
-          identifier,
+          identifier: safeIdentifierLog,
           action: "account_bruteforce_protection",
           lockoutRemainingSeconds: acctRateLimit.lockoutRemainingSeconds,
         },

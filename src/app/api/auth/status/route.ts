@@ -18,7 +18,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       status: isRemoteDatabaseConfigured() ? "online" : "standby",
       database: {
-        provider: "Neon PostgreSQL",
+        provider: "PostgreSQL",
         isConfigured: isRemoteDatabaseConfigured(),
       },
       timestamp: new Date().toISOString(),
